@@ -12,12 +12,12 @@
 
 schema_version: "1.0"
 
-group_id: "GXX"
-repository_url: "https://github.com/..."
+group_id: "G44"
+repository_url: "https://github.com/Ncastangia1/isw-qubo-classification-G44"
 submission_date: "YYYY-MM-DD"
 
 students:
-  - student_id: "60/61/XXXXX"        #Matricola completa
+  - student_id: "60/61/66404"        #Matricola completa
     role_in_project:
       - "preprocessing"
       - "feature_selection"
@@ -25,7 +25,7 @@ students:
       - "testing"
       - "documentation"
       - "gui"
-  - student_id: "60/61/XXXXX"        #Matricola completa
+  - student_id: "60/61/66397"        #Matricola completa
     role_in_project:
       - "preprocessing"
       - "feature_selection"
@@ -45,9 +45,9 @@ team_work:
     documentation_percent: null
   collaboration_mode:
     # valori suggeriti: "pair_programming", "divisione_per_moduli", "mista"
-    type: null
+    type: pair_programming
     notes: null
-    remote_collaboration_perc: 0   # Percentuale di lavoro in call (0-100)
+    remote_collaboration_perc: 100   # Percentuale di lavoro in call (0-100)
   estimated_total_hours:
     student_1_hours: null
     student_2_hours: null

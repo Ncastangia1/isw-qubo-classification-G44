@@ -1,0 +1,829 @@
+"Architecture & Development Blueprint
+
+Based on the specification contained in Progetto_ISW_2025-26_specifiche.pdf.
+
+Section 1 – Executive Summary
+
+The project consists of building a complete Python application for binary classification on large tabular datasets with an intermediate QUBO-based feature selection stage.
+
+The system must:
+
+Read a CSV dataset.
+Remove low-quality features.
+Normalize all numerical features using z-score normalization.
+Split the dataset into training and test subsets.
+Perform feature reduction using a QUBO optimization model based on Spearman correlations.
+Train one of three classification algorithms.
+Save the trained model.
+Evaluate the model on the test set.
+Export predictions and quality metrics.
+Expose both:
+Python API functions
+CLI commands
+GUI interface
+Include automated tests and reproducibility guarantees.
+
+The final implementation must be scalable enough to process datasets up to 1.5 million+ rows.
+
+Section 2 – Functional Requirements
+FR-1 Dataset Input
+
+The system must:
+
+Read CSV files.
+Detect header row.
+Accept the target column name as input.
+Support binary targets encoded as 0/1.
+Support any number of rows and features.
+FR-2 Preprocessing
+
+The preprocessing phase must:
+
+Load dataset.
+Separate target column.
+Detect empty/almost-empty features.
+Remove features below threshold.
+Normalize all remaining features.
+Preserve target column.
+Produce normalized CSV.
+Produce preprocessing JSON report.
+FR-3 Feature Removal
+
+A feature must be removable when it contains:
+
+too many missing values
+too many zero values
+
+Threshold supplied by user. Example: 95%.
+
+FR-4 Normalization
+
+Must perform:
+
+z-score standardization
+mean = 0
+standard deviation = 1
+
+Target column excluded.
+
+FR-5 Dataset Split
+
+Must:
+
+Compute M from test percentage.
+Use first M rows as training set.
+Use remaining rows as test set.
+Perform hard split (no shuffle).
+Save both datasets.
+FR-6 QUBO Feature Selection
+
+Must:
+
+Construct QUBO matrix.
+Use Spearman correlations.
+Use influence term feature-target.
+Use redundancy term feature-feature.
+Use parameter α ∈ [0,1].
+Optimize repeatedly varying α.
+Find K selected features within tolerance.
+Produce binary solution vector.
+Save optimization history.
+Save feature selection JSON report.
+FR-7 Feature Reduction
+
+Must:
+
+Apply selected feature mask.
+Generate reduced training dataset.
+Generate reduced test dataset.
+Keep target column.
+FR-8 Model Training
+
+Must implement exactly three classifiers.
+
+Mandatory:
+
+Random Forest
+
+Additional two chosen by team. Examples:
+
+Logistic Regression
+SVM
+Decision Tree
+KNN
+Gradient Boosting
+
+Must:
+
+Load reduced training set.
+Train selected classifier.
+Save model.
+Save training metrics.
+FR-9 Prediction
+
+Must:
+
+Load reduced test set.
+Load trained model.
+Generate predictions.
+Generate classification scores/probabilities.
+Produce predictions CSV.
+Produce classification statistics JSON.
+FR-10 GUI
+
+GUI must allow:
+
+Dataset selection.
+Preprocessing execution.
+Feature selection execution.
+Training execution.
+Prediction execution.
+Output visualization.
+Basic validation of user inputs.
+FR-11 Automated Tests
+
+Must verify:
+
+Numeric preprocessing output.
+Missing value handling.
+Valid normalization.
+Binary vector generation.
+Approximate feature percentage.
+Model file generation.
+Prediction CSV format.
+Section 3 – Non-Functional Requirements
+Performance Requirements
+
+Must process:
+
+input dataset with 20,000 rows and 145 features
+evaluation dataset with 1,500,000+ rows
+
+Implications:
+
+memory-efficient CSV handling
+vectorized operations
+avoid unnecessary copies
+Scalability Requirements
+
+Must support:
+
+arbitrary number of rows
+arbitrary number of columns
+
+No hardcoded dataset dimensions.
+
+Reproducibility Requirements
+
+Mandatory:
+
+requirements.txt
+no absolute paths
+runnable from terminal
+no manual input during evaluation
+seed usage when possible
+no internet downloads
+no credentials
+GUI independent from CLI
+reproducible from GitHub ZIP download.
+Maintainability Requirements
+
+Required by repository structure:
+
+modular architecture
+separated preprocessing
+separated feature selection
+separated model logic
+isolated GUI
+test suite
+documentation.
+Evaluation Constraints
+
+Evaluator uses:
+
+Python API
+CLI commands
+Output file inspection
+
+Therefore interfaces must exactly match specification.
+
+Section 4 – Repository Architecture
+Required Repository Tree
+isw-qubo-classification-GXX/
+│
+├── README.md
+├── requirements.txt
+├── group_info.yaml
+│
+├── data/
+│   ├── input_dataset.csv
+│   └── sample_test_dataset.csv
+│
+├── src/
+│   └── qubo_project/
+│       ├── __init__.py
+│       ├── preprocessing.py
+│       ├── feature_selection.py
+│       ├── model.py
+│       └── gui.py
+│
+├── tests/
+│
+├── outputs/
+│
+└── reports/
+    ├── project_report.yaml
+    └── llm_usage/
+        ├── LOG-GXX-01.md
+        ├── LOG-GXX-02.md
+        └── files/
+
+
+Specified explicitly by project requirements.
+
+File Responsibilities
+README.md
+
+Purpose:
+
+installation
+usage
+CLI commands
+GUI command
+
+Dependencies:
+
+entire project
+requirements.txt
+
+Purpose:
+
+reproducibility
+dependency installation
+group_info.yaml
+
+Purpose:
+
+group metadata
+LLM information
+completion flag
+preprocessing.py
+
+Responsibilities:
+
+CSV loading
+column filtering
+z-score normalization
+JSON report generation
+
+Dependencies:
+
+pandas
+numpy
+sklearn preprocessing
+feature_selection.py
+
+Responsibilities:
+
+Spearman correlation computation
+QUBO matrix generation
+alpha search
+optimization
+training/test split
+reduced dataset generation
+
+Dependencies:
+
+pandas
+scipy
+QUBO solver
+model.py
+
+Responsibilities:
+
+classifier training
+model serialization
+inference
+metrics generation
+
+Dependencies:
+
+scikit-learn
+joblib
+gui.py
+
+Responsibilities:
+
+user interaction
+workflow orchestration
+tests/
+
+Responsibilities:
+
+automated validation
+outputs/
+
+Responsibilities:
+
+runtime artifacts
+models
+CSV outputs
+JSON outputs
+reports/
+
+Responsibilities:
+
+academic documentation
+LLM traceability
+Section 5 – Software Design
+Recommended Architecture
+Presentation Layer
+│
+├── GUI
+├── CLI
+│
+Application Layer
+│
+├── preprocessing service
+├── qubo service
+├── training service
+├── prediction service
+│
+Domain Layer
+│
+├── dataset model
+├── feature selector
+├── classifier abstraction
+│
+Infrastructure Layer
+│
+├── file persistence
+├── model persistence
+├── reporting
+
+Preprocessing Layer
+
+Responsibilities:
+
+data ingestion
+missing-value analysis
+zero-value analysis
+normalization
+dataset export
+
+Output:
+
+normalized.csv
+preprocessing_result.json
+
+Feature Selection Layer
+
+Responsibilities:
+
+Spearman matrix creation
+target correlation computation
+QUBO matrix construction
+optimization execution
+alpha search
+
+Outputs:
+
+training_reduced.csv
+test_reduced.csv
+feature_selection.json
+optimizations.csv
+
+Machine Learning Layer
+
+Responsibilities:
+
+classifier registry
+training
+validation
+prediction
+
+Recommended classifiers:
+
+Random Forest
+Logistic Regression
+Gradient Boosting
+Persistence Layer
+
+Responsibilities:
+
+CSV storage
+JSON reports
+Joblib models
+GUI Layer
+
+Responsibilities:
+
+workflow execution
+parameter configuration
+result inspection
+CLI Layer
+
+Responsibilities:
+
+evaluation compatibility
+script execution
+
+Must exactly match specification commands.
+
+Section 6 – QUBO Analysis
+Spearman Correlations
+
+Specification requires Spearman correlations because they do not assume linear relationships.
+
+Two correlation families are required:
+
+Feature ↔ Target
+ρVj\rho_{Vj}
+
+Measures influence of feature j on target.
+
+Absolute value used.
+
+Feature ↔ Feature
+ρij\rho_{ij}
+
+Measures redundancy between features.
+
+Absolute value used.
+
+Feature-Target Influence
+
+Encourages selecting features strongly correlated with target.
+
+Higher correlation:
+
+lower objective value
+greater chance of selection
+
+according to specification formulation.
+
+Feature-Feature Redundancy
+
+Penalizes selecting highly correlated feature pairs.
+
+Goal:
+
+maximize information
+reduce redundancy.
+Alpha Parameter
+0≤α≤10 \le \alpha \le 1
+
+Behavior:
+
+α = 0 → no features selected
+α = 1 → all features selected
+
+Specified explicitly.
+
+Search Strategy for Alpha
+
+Required:
+
+Build QUBO for α.
+Optimize.
+Count selected features.
+Compare with target K.
+Adjust α.
+Repeat.
+Stop when:
+target K ± allowance reached
+
+
+or
+
+alpha_computations exceeded
+
+
+QUBO must NOT explicitly constrain cardinality K. Alpha search is mandatory.
+
+Output Binary Vector
+
+Output:
+
+x*
+
+
+Example:
+
+[1,0,0,1,1,0,...]
+
+
+Meaning:
+
+1 = selected
+0 = excluded
+
+
+Length equals number of features after preprocessing.
+
+Section 7 – Recommended Libraries
+CSV Processing
+pandas
+
+Pros:
+
+fast
+mature
+CSV utilities
+scalable
+
+Cons:
+
+memory heavy for huge datasets
+
+Why:
+
+Most practical solution.
+
+Normalization
+scikit-learn StandardScaler
+
+Pros:
+
+robust
+battle-tested
+exact z-score standardization
+
+Cons:
+
+additional dependency
+
+Why:
+
+Matches specification exactly.
+
+QUBO Optimization
+D-Wave Ocean SDK (neal)
+
+Pros:
+
+simulated annealing
+open source
+QUBO-native
+
+Cons:
+
+learning curve
+
+Why:
+
+Directly solves QUBO problems.
+
+Alternative:
+
+pyqubo
+openjij
+Machine Learning
+scikit-learn
+
+Pros:
+
+includes all required classifiers
+metrics
+serialization integration
+
+Cons:
+
+not distributed computing
+
+Why:
+
+Best fit to specification.
+
+Model Persistence
+joblib
+
+Pros:
+
+recommended by specification
+efficient
+
+Cons:
+
+Python-specific
+GUI
+Streamlit
+
+Pros:
+
+fastest implementation
+clean interface
+
+Cons:
+
+web-based
+
+Why:
+
+Lowest development effort.
+
+Alternative:
+
+Tkinter if desktop GUI desired.
+Testing
+pytest
+
+Pros:
+
+explicitly required
+fixtures
+parametrization
+
+Cons:
+
+none significant
+Section 8 – Risk Analysis
+Technical Risks
+QUBO Solver Scalability
+
+Dense Q matrix:
+
+145 x 145 initially
+
+
+Can become computational bottleneck.
+
+Spearman Computation Cost
+
+Requires pairwise correlations.
+
+Complexity grows quadratically with feature count.
+
+Memory Consumption
+
+1.5M-row datasets may stress RAM.
+
+Performance Risks
+Full dataframe duplication.
+Recomputing correlations.
+Excessive alpha iterations.
+Inefficient CSV IO.
+Evaluation Risks
+
+Highest-risk failures:
+
+Wrong repository tree.
+Missing mandatory functions.
+Wrong function signatures.
+Wrong CLI commands.
+Wrong JSON schemas.
+Wrong prediction CSV format.
+Missing tests.
+No saved model.
+Not using QUBO.
+Incorrect alpha search.
+Common Implementation Mistakes
+Data Leakage
+
+Forbidden:
+
+fit scaler on test data
+train on test data
+use target incorrectly
+
+Explicitly penalized.
+
+Cardinality-Constrained QUBO
+
+Specification explicitly forbids imposing exact K in objective.
+
+Must search via α.
+
+Incorrect Split
+
+Must use:
+
+first M rows → train
+remaining rows → test
+
+
+No random split.
+
+Section 9 – Development Roadmap
+Phase 1
+
+Repository setup
+
+Create structure.
+Create requirements.txt.
+Create package skeleton.
+Configure pytest.
+Phase 2
+
+Preprocessing module
+
+CSV loader.
+Missing-value removal.
+Zero-value filtering.
+Standardization.
+JSON report.
+CLI.
+
+Validate thoroughly before continuing.
+
+Phase 3
+
+QUBO foundation
+
+Spearman correlations.
+Influence scores.
+Redundancy matrix.
+Q matrix construction.
+
+Validate mathematically.
+
+Phase 4
+
+Optimization engine
+
+Solver integration.
+Alpha search strategy.
+Binary vector validation.
+Optimization logging.
+Phase 5
+
+Feature reduction
+
+Feature masking.
+Train/Test split.
+CSV exports.
+JSON report.
+Phase 6
+
+Machine learning
+
+Classifier abstraction.
+Random Forest.
+Logistic Regression.
+Gradient Boosting.
+Model persistence.
+Metrics export.
+Phase 7
+
+Prediction engine
+
+Model loading.
+Prediction generation.
+Probability generation.
+Metrics generation.
+ROC-AUC.
+Confusion matrix.
+Phase 8
+
+CLI compliance
+
+Implement exact required commands for:
+
+preprocessing.py
+feature_selection.py
+model.py train
+model.py predict
+Phase 9
+
+GUI
+
+Dataset selection.
+Parameter forms.
+Execute pipeline.
+Show reports.
+Save outputs.
+Phase 10
+
+Automated testing
+
+Implement all mandatory tests plus:
+
+CLI tests
+JSON schema tests
+model reload tests
+alpha convergence tests
+Phase 11
+
+Documentation
+
+README.
+group_info.yaml.
+project_report.yaml.
+LLM logs.
+Phase 12
+
+Final compliance audit
+
+Verify:
+
+function signatures exact
+CLI exact
+JSON exact
+outputs exact
+pytest passes
+repository tree exact
+ZIP reproducibility
+no absolute paths
+no interactive prompts
+
+This final compliance audit is the most important step because the automatic evaluator relies heavily on strict structural and interface conformity.

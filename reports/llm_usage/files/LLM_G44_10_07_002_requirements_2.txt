@@ -1,0 +1,937 @@
+"Technical Design Document – feature_selection.py
+
+This document is derived strictly from the project specification contained in Progetto_ISW_2025-26_specifiche.pdf. Where the specification is explicit, it is treated as authoritative. Where ambiguity exists, it is explicitly identified rather than resolved by inventing alternative formulations.
+
+SECTION 1 – Formal Problem Definition
+1.1 Purpose
+
+The purpose of feature_selection.py is to:
+
+Read the normalized dataset.
+Build a QUBO feature-selection problem.
+Optimize the QUBO repeatedly while varying α.
+Obtain approximately the desired number of selected features.
+Generate reduced training and test datasets.
+Save optimization statistics and outputs.
+1.2 Input Data
+
+Input dataset:
+
+UU
+
+where:
+
+rows = samples
+columns = features
+
+and
+
+VV
+
+is the binary target vector.
+
+The module receives:
+
+normalized CSV
+target column name
+desired feature percentage
+tolerance allowance
+test-set percentage
+random seed
+maximum number of alpha evaluations (alpha_computations)
+1.3 Output Data
+
+Primary output:
+
+X∗X^*
+
+Binary selection vector:
+
+X∗=[x1,x2,…,xn]X^*=[x_1,x_2,\dots,x_n]
+
+where:
+
+xj=1x_j=1 → feature selected
+xj=0x_j=0 → feature removed
+
+Additional outputs:
+
+reduced training dataset
+reduced test dataset
+optimization history CSV
+feature-selection JSON report
+1.4 Optimization Objective
+
+The specification states:
+
+select features that are strongly correlated with the target and weakly correlated with each other.
+
+Therefore the objective combines:
+
+Influence
+
+Feature-target relevance.
+
+Higher correlation with target is desirable.
+
+Independence
+
+Feature-feature redundancy.
+
+Higher feature-feature correlation is undesirable.
+
+1.5 Role of Alpha
+
+The specification defines:
+
+0≤α≤10 \le \alpha \le 1
+
+with:
+
+α = 0 → no features selected
+α = 1 → all features selected
+
+Alpha regulates the balance between:
+
+influence term
+independence term
+
+The required number of selected features must be obtained exclusively by changing α.
+
+No cardinality constraint may be added to the QUBO.
+
+1.6 Role of Influence
+
+Influence quantifies:
+
+∣ρVj∣|\rho_{Vj}|
+
+where:
+
+feature jj
+target vector VV
+
+A large value means feature jj contains information useful for predicting the target.
+
+1.7 Role of Redundancy
+
+Redundancy quantifies:
+
+∣ρjk∣|\rho_{jk}|
+
+between pairs of features.
+
+Large values indicate duplicated information.
+
+The optimization penalizes simultaneous selection of highly correlated features.
+
+SECTION 2 – Mathematical Breakdown
+2.1 Spearman Feature-Target Correlations
+
+For every feature:
+
+ρVj\rho_{Vj}
+
+must be computed using Spearman correlation.
+
+Reason:
+
+The specification explicitly chooses Spearman because it does not assume linear relationships.
+
+2.2 Spearman Feature-Feature Correlations
+
+For every feature pair:
+
+ρjk\rho_{jk}
+
+compute Spearman correlation.
+
+This generates a full pairwise correlation structure.
+
+2.3 Absolute Value Handling
+
+The specification explicitly requires:
+
+∣ρVj∣|\rho_{Vj}|
+
+and
+
+∣ρjk∣|\rho_{jk}|
+
+not signed correlations.
+
+Consequences:
+
+strong negative correlation is treated as informative
+strong positive correlation is treated as informative
+both contribute equally in magnitude
+2.4 Diagonal of Q
+
+The appendix explicitly states:
+
+terms α xj |ρVj| are placed on the diagonal.
+
+Therefore:
+
+QjjQ_{jj}
+
+contains the influence contribution associated with feature jj.
+
+2.5 Off-Diagonal Elements
+
+The appendix states:
+
+terms −(1−α)|ρjk| are elements of row j column k.
+
+Therefore:
+
+QjkQ_{jk}
+
+captures redundancy penalties.
+
+2.6 Alpha Effect
+
+Increasing α:
+
+increases influence importance
+reduces independence importance
+generally increases selected features
+
+Decreasing α:
+
+strengthens independence pressure
+discourages selection
+usually leads to fewer selected features
+SECTION 3 – Q Matrix Construction Strategy
+3.1 Inputs
+
+Input:
+
+normalized feature matrix UU
+target vector VV
+3.2 Output
+
+Output:
+
+Q∈Rn×nQ \in \mathbb{R}^{n \times n}
+
+where nn is the number of features after preprocessing.
+
+3.3 Dimensions
+
+If:
+
+n=145n = 145
+
+then:
+
+Q=145×145Q = 145 \times 145
+
+If:
+
+n=500n = 500
+
+then:
+
+Q=500×500Q = 500 \times 500
+
+etc.
+
+3.4 Symmetry
+
+Because:
+
+∣ρjk∣=∣ρkj∣|\rho_{jk}| = |\rho_{kj}|
+
+the off-diagonal structure is symmetric.
+
+Therefore:
+
+Qjk=QkjQ_{jk}=Q_{kj}
+
+for all feature pairs.
+
+3.5 Storage Requirements
+
+Dense matrix requirement is explicit in the appendix:
+
+Q of our problem is dense.
+
+Approximate storage using float64:
+
+145 Features
+
+Elements:
+
+1452=21,025145^2 = 21,025
+
+Memory:
+
+~168 KB
+
+Trivial.
+
+500 Features
+
+Elements:
+
+250,000250,000
+
+Memory:
+
+~2 MB
+
+Very manageable.
+
+1000 Features
+
+Elements:
+
+1,000,0001,000,000
+
+Memory:
+
+~8 MB
+
+Still manageable.
+
+3.6 Computational Complexity
+Feature-Target Correlations
+
+Cost:
+
+O(nm)O(nm)
+
+where:
+
+n = features
+m = rows
+Feature-Feature Correlations
+
+Cost approximately:
+
+O(n2m)O(n^2m)
+
+This is the dominant component.
+
+3.7 Feasibility
+145 Features
+
+Very feasible.
+
+Pair count:
+
+145⋅144/2=10,440145 \cdot 144 / 2 = 10,440
+500 Features
+
+Pair count:
+
+124,750124,750
+
+Still practical.
+
+1000 Features
+
+Pair count:
+
+499,500499,500
+
+Potentially expensive but feasible if carefully implemented.
+
+The bottleneck becomes correlation computation, not matrix storage.
+
+SECTION 4 – Candidate QUBO Solvers
+4.1 D-Wave Neal
+Installation
+
+Moderate.
+
+Typically:
+
+dwave-neal
+supporting D-Wave packages
+Maintenance
+
+Very mature ecosystem.
+
+Widely used.
+
+Performance
+
+Simulated annealing specialized for QUBO.
+
+Good for dense medium-sized problems.
+
+Reproducibility
+
+Excellent.
+
+Supports deterministic seeds.
+
+Dense QUBO Suitability
+
+Very suitable for:
+
+145-feature problem
+dense matrices
+4.2 OpenJij
+Installation
+
+Moderate.
+
+Requires additional dependencies.
+
+Maintenance
+
+Actively developed.
+
+Performance
+
+Often competitive or faster than Neal.
+
+Provides advanced samplers.
+
+Reproducibility
+
+Good.
+
+Seed support available.
+
+Dense QUBO Suitability
+
+Very good.
+
+Especially for experimentation.
+
+4.3 PyQUBO + Backend Solvers
+Installation
+
+Higher complexity.
+
+Requires:
+
+PyQUBO
+external backend solver
+Maintenance
+
+Additional abstraction layer.
+
+Performance
+
+Depends entirely on backend.
+
+Reproducibility
+
+Depends on solver chosen.
+
+Dense QUBO Suitability
+
+Indirect.
+
+Adds complexity without obvious benefits because the Q matrix is already directly provided by the specification.
+
+Recommended Solver
+Recommendation: D-Wave Neal
+
+Reasons:
+
+Mature.
+Stable.
+Easy seed control.
+Direct QUBO support.
+Simple dependency chain.
+Strong reproducibility.
+Appropriate for dense matrices with ~145 features.
+SECTION 5 – Alpha Search Design
+Requirement
+
+Specification explicitly states:
+
+vary α repeatedly
+obtain desired K
+do not encode K inside QUBO
+Target
+
+Expected features:
+
+K=round(percSelected⋅n)K = round(percSelected \cdot n)
+
+Acceptance:
+
+K±allowanceK \pm allowance
+Candidate Strategies
+Linear Search
+
+Advantages:
+
+simple
+deterministic
+
+Disadvantages:
+
+may waste iterations
+poor efficiency
+Binary Search
+
+Advantages:
+
+logarithmic convergence
+
+Disadvantages:
+
+Requires monotonic behavior.
+
+The specification suggests feature count generally increases with α, but does not mathematically guarantee strict monotonicity.
+
+Therefore binary search may occasionally fail.
+
+Adaptive Search
+
+Procedure:
+
+Start α = 0.5
+Evaluate
+Compare selected count with target
+Move upward or downward
+Reduce step size progressively
+Stop when tolerance achieved
+
+Advantages:
+
+robust to slight non-monotonicity
+fewer evaluations than linear search
+safer than strict binary search
+Recommended Approach
+
+Adaptive binary-style search.
+
+Stopping Criteria
+
+Stop if:
+
+Criterion 1
+
+Desired range reached:
+
+K−allowance≤nselected≤K+allowanceK-allowance \le n_{selected} \le K+allowance
+Criterion 2
+
+Maximum alpha evaluations reached.
+
+iterations=alpha_computationsiterations = alpha\_computations
+Criterion 3
+
+Repeated identical outcomes.
+
+Handling Oscillation
+
+Possible:
+
+17 features
+21 features
+18 features
+22 features
+
+
+Strategy:
+
+Return best solution encountered.
+
+Best = minimum distance from target K.
+
+Handling Non-Convergence
+
+If limit reached:
+
+Return:
+
+closest solution found
+corresponding alpha
+full optimization history
+
+This respects specification and avoids infinite loops.
+
+SECTION 6 – Scalability Analysis
+6.1 Row-Dependent Operations
+
+Depend on row count:
+
+Spearman ranking
+feature-target correlations
+feature-feature correlations
+
+These dominate runtime.
+
+6.2 Feature-Dependent Operations
+
+Depend on feature count:
+
+Q construction
+solver complexity
+memory footprint
+6.3 Memory Bottlenecks
+
+Largest consumer:
+
+Normalized dataset itself.
+
+Evaluation data exceeds:
+
+1.5 million rows.
+
+For 145 features this may occupy several GB in memory.
+
+6.4 Correlation Bottleneck
+
+Most expensive operation:
+
+O(n2m)O(n^2m)
+
+pairwise Spearman computation.
+
+Optimization is secondary.
+
+6.5 Optimization Bottleneck
+
+Dense QUBO optimization repeated many times.
+
+Cost:
+
+alpha_computations×solver_runtimealpha\_computations \times solver\_runtime
+Recommended Efficiency Measures
+Read only once.
+Keep feature matrix numeric.
+Avoid dataframe copies.
+Reuse correlation matrices.
+Build correlations once.
+Rebuild Q from cached correlations only.
+Store optimization statistics incrementally.
+SECTION 7 – Output JSON Design Review
+
+Required schema:
+
+n_features
+
+Source:
+
+Features after preprocessing.
+
+Validation:
+
+0
+
+target_ratio
+
+Source:
+
+percSelected
+
+Validation:
+
+0 < value ≤ 1
+
+target_k
+
+Source:
+
+round(targetRatio⋅nFeatures)round(targetRatio \cdot nFeatures)
+allowance
+
+Direct input parameter.
+
+Validation:
+
+≥ 0
+
+n_selected
+
+Count of ones in selected vector.
+
+Validation:
+
+Must equal length(selected_feature_names).
+
+alpha
+
+Final accepted alpha.
+
+Validation:
+
+0 ≤ alpha ≤ 1
+
+selected_vector
+
+Binary solution.
+
+Validation:
+
+length = n_features
+only 0 or 1 values
+selected_feature_names
+
+Source:
+
+Columns corresponding to ones.
+
+Validation:
+
+Count equals n_selected.
+
+algorithm
+
+Solver identifier.
+
+Example:
+
+simulated_annealing
+
+seed
+
+Input seed.
+
+alpha_computations
+
+Actual number of evaluations performed.
+
+Potential ambiguity:
+
+Specification example may represent either:
+
+actual evaluations
+configured maximum
+
+Document clearly.
+
+percTest
+
+Input value.
+
+training_dataset_size
+
+Computed after split.
+
+test_dataset_size
+
+Computed after split.
+
+q_matrix_creation_time
+
+Measured runtime.
+
+mean_optimization_time
+
+Mean over all alpha evaluations.
+
+std_dev_optimization_time
+
+Standard deviation over all alpha evaluations.
+
+Edge case:
+
+Single evaluation:
+
+standard deviation = 0.
+
+SECTION 8 – Failure Modes
+Invalid Dataset
+
+Examples:
+
+empty file
+malformed CSV
+
+Handling:
+
+Immediate validation failure.
+
+Missing Target Column
+
+Handling:
+
+Abort with explicit error.
+
+Constant Columns
+
+Spearman may become undefined.
+
+Handling:
+
+Treat correlation as zero.
+
+Document choice.
+
+NaN Values
+
+May survive preprocessing.
+
+Handling:
+
+Validate before correlation phase.
+
+No Features After Preprocessing
+
+Possible if threshold too strict.
+
+Handling:
+
+Abort with meaningful error.
+
+Impossible Requested K
+
+Examples:
+
+0 features desired
+
+or
+
+more than available.
+
+Handling:
+
+Clamp and validate before optimization.
+
+Alpha Non-Convergence
+
+Handling:
+
+Return nearest solution found.
+
+Solver Failure
+
+Examples:
+
+memory internal exception invalid Q
+
+Handling:
+
+log failure
+preserve diagnostics
+terminate cleanly
+Non-Binary Solver Output
+
+Handling:
+
+validate before acceptance.
+
+SECTION 9 – Testing Strategy
+Unit Tests
+Correlation Computation
+
+Verify:
+
+Spearman value generation
+absolute value usage
+Q Matrix Construction
+
+Verify:
+
+correct dimensions
+symmetry
+valid diagonal population
+valid off-diagonal population
+Target K Calculation
+
+Verify:
+
+correct rounding
+allowance handling
+Selected Vector Validation
+
+Verify:
+
+binary values only
+expected length
+Integration Tests
+Full Feature Selection Pipeline
+
+Verify:
+
+normalized input read
+Q created
+alpha search executed
+reduced datasets produced
+JSON generated
+Dataset Split Test
+
+Verify:
+
+first M rows → training
+
+remaining rows → test
+
+Exactly as specified.
+
+Edge Case Tests
+Single Feature
+
+Verify system still operates.
+
+All Features Constant
+
+Verify graceful failure.
+
+Highly Correlated Features
+
+Verify redundancy penalty influences selection.
+
+Very Small Dataset
+
+Verify stability.
+
+Large Allowance
+
+Verify acceptance criterion behaves correctly.
+
+Performance Tests
+20k × 145 Dataset
+
+Verify acceptable runtime.
+
+This matches reference project scale.
+
+Alpha Limit Stress Test
+
+Verify:
+
+no infinite loop
+alpha_computations respected
+Reproducibility Test
+
+Run twice with same seed.
+
+Verify:
+
+same selected vector
+same alpha
+same feature list
+SECTION 10 – Final Recommendation
+
+The safest implementation strategy consistent with the specification is:
+
+Load normalized dataset.
+Separate target column.
+Compute all Spearman feature-target correlations once.
+Compute all Spearman feature-feature correlations once.
+Cache both structures.
+For every alpha evaluation:
+construct dense Q matrix from cached correlations
+run simulated annealing
+obtain binary vector
+count selected features
+Use adaptive alpha search.
+Stop when target K ± allowance is achieved or when alpha_computations is exhausted.
+Retain the closest solution encountered.
+Save:
+optimization history CSV
+final JSON report
+reduced training dataset
+reduced test dataset
+Ensure strict compliance with:
+required function signature
+required JSON schema
+required CSV outputs
+first-M-row split rule
+no cardinality constraint in QUBO
+seed-controlled reproducibility.
+
+From an engineering perspective, the highest-risk area is alpha search behavior, not QUBO construction. The Q matrix formulation is explicitly defined in the appendix, whereas the search procedure is intentionally left open. Therefore, the implementation should prioritize a deterministic, reproducible, and well-documented adaptive alpha search that always returns the closest feasible feature count while respecting the alpha_computations limit."

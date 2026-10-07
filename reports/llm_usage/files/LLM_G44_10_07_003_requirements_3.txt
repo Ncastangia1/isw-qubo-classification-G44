@@ -1,0 +1,1106 @@
+"Technical Design Document – preprocessing.py
+Purpose
+
+preprocessing.py is the first executable stage of the project pipeline.
+
+Its outputs become the direct inputs of the QUBO feature-selection subsystem. Therefore this module must guarantee:
+
+dataset integrity
+deterministic preprocessing
+reproducible normalization
+consistent feature removal
+specification-compliant outputs
+
+Because all subsequent stages depend on its output, preprocessing errors propagate through the entire pipeline.
+
+SECTION 1 – Functional Analysis
+Responsibility 1: Read Dataset
+Input
+input_csv
+target_column
+Output
+
+In-memory tabular dataset.
+
+Processing Logic
+Open CSV file.
+Read header row.
+Load all columns.
+Verify target column exists.
+Validation Requirements
+
+Must verify:
+
+file exists
+readable CSV
+non-empty file
+target column present
+Failure Severity
+
+Critical.
+
+No preprocessing can continue.
+
+Responsibility 2: Identify Target Column
+Input
+
+Dataset and target column name.
+
+Output
+Feature matrix
+Target vector
+Processing Logic
+
+Split:
+
+dataset
+├── features
+└── target
+
+
+Target column must never be processed as a feature.
+
+Validation Requirements
+
+Target must:
+
+exist
+be uniquely identifiable
+Responsibility 3: Eliminate Invalid Features
+Input
+
+Feature columns only.
+
+Output
+
+Filtered feature set.
+
+Processing Logic
+
+For every feature:
+
+Count valid entries.
+Compute valid percentage.
+Compare against minPercValid.
+Keep or remove column.
+Validation Requirements
+
+Percentage calculation must be deterministic.
+
+Responsibility 4: Normalize Features
+Input
+
+Remaining feature columns.
+
+Output
+
+Normalized feature matrix.
+
+Processing Logic
+
+Apply z-score standardization:
+
+z = (x - mean) / std
+
+
+Target column excluded.
+
+Validation Requirements
+
+All resulting values must be numeric.
+
+Responsibility 5: Preserve Target
+Input
+
+Original target vector.
+
+Output
+
+Target column unchanged.
+
+Processing Logic
+
+Append target column to normalized dataset.
+
+No transformation allowed.
+
+Responsibility 6: Save Normalized CSV
+Input
+
+Normalized feature matrix + target.
+
+Output
+
+normalized_csv
+
+Validation Requirements
+CSV writable
+header included
+correct column ordering
+Responsibility 7: Save Statistics JSON
+Input
+
+Processing metadata.
+
+Output
+
+outInitialRes_json
+
+Validation Requirements
+
+All mandatory fields present.
+
+SECTION 2 – Dataset Validation Design
+
+Validation should occur before any expensive computation.
+
+Missing File
+Severity
+
+Critical
+
+Expected Behavior
+
+Immediate failure.
+
+Strategy
+
+Raise explicit file-not-found error.
+
+Invalid CSV
+
+Examples:
+
+malformed delimiter usage
+corrupted rows
+unreadable structure
+Severity
+
+Critical
+
+Expected Behavior
+
+Abort processing.
+
+Strategy
+
+Fail fast with parsing error.
+
+Missing Target Column
+Severity
+
+Critical
+
+Expected Behavior
+
+Abort.
+
+Strategy
+
+Explicit validation before preprocessing.
+
+Duplicate Column Names
+Severity
+
+High
+
+Problem
+
+Target identification becomes ambiguous.
+
+Expected Behavior
+
+Abort.
+
+Strategy
+
+Require unique column names.
+
+Empty Dataset
+Severity
+
+Critical
+
+Example
+
+0 rows.
+
+Expected Behavior
+
+Abort.
+
+Dataset Containing Only Header
+Severity
+
+Critical
+
+Expected Behavior
+
+Abort.
+
+Single-Row Dataset
+Severity
+
+High
+
+Reason
+
+Standard deviation undefined.
+
+Expected Behavior
+
+Reject dataset.
+
+Single Feature Dataset
+Severity
+
+Medium
+
+Expected Behavior
+
+Allowed.
+
+Feature selection later may become trivial.
+
+Non-Numeric Feature Values
+Severity
+
+High
+
+Possible Situations
+A,B,C
+1,2,hello
+
+Ambiguity
+
+Specification does not explicitly state whether categorical columns may appear.
+
+Recommended Interpretation
+
+All feature columns must be numeric.
+
+Reject non-numeric features.
+
+Infinite Values
+Severity
+
+High
+
+Examples
++inf
+-inf
+
+Expected Behavior
+
+Treat as invalid data.
+
+Abort preprocessing.
+
+NaN Values
+Severity
+
+Expected condition
+
+Specification explicitly considers missing values.
+
+Expected Behavior
+
+Used during feature-validity evaluation.
+
+SECTION 3 – Feature Elimination Design
+Specification Statement
+
+The specification states:
+
+eliminate features with less than minPercValid non-zero or non-missing values.
+
+Interpretation:
+
+Define:
+
+valid value =
+not NaN
+AND
+not 0
+
+
+For each feature:
+
+valid_ratio =
+valid_count / total_rows
+
+
+Feature survives if:
+
+valid_ratio >= minPercValid
+
+
+Feature removed if:
+
+valid_ratio < minPercValid
+
+
+This is the most literal reading of the requirement.
+
+Case A
+Data
+95% zeros
+5% valid values
+
+Result
+valid_ratio = 0.05
+
+
+If:
+
+minPercValid = 0.05
+
+
+Feature survives.
+
+Reason:
+
+Condition is not less than threshold.
+
+Case B
+Data
+94% zeros
+6% valid
+
+Result
+0.06 > 0.05
+
+
+Feature survives.
+
+Case C
+Data
+95% NaN
+5% values
+
+Result
+valid_ratio = 0.05
+
+
+Feature survives.
+
+Case D
+Data
+90% NaN + zeros combined
+10% valid values
+
+Result
+valid_ratio = 0.10
+
+
+Feature survives.
+
+Case E
+Data
+
+Constant non-zero column.
+
+Example:
+
+5
+5
+5
+5
+5
+
+Result
+
+All entries valid.
+
+valid_ratio = 1.0
+
+
+Feature survives elimination phase.
+
+Important:
+
+Normalization phase must later handle zero variance.
+
+Case F
+Data
+
+All ones.
+
+Result
+
+All entries valid.
+
+valid_ratio = 1.0
+
+
+Feature survives elimination phase.
+
+Ambiguities
+Ambiguity 1
+
+Meaning of:
+
+non-zero or non-missing
+
+
+Possible readings:
+
+NOT zero AND NOT missing
+NOT zero OR NOT missing
+
+The first interpretation is more consistent with the examples and project intent.
+
+Ambiguity 2
+
+Constant Columns
+
+Specification does not explicitly say whether constant columns should be removed.
+
+Recommendation:
+
+Keep them in elimination phase.
+
+Handle during normalization.
+
+SECTION 4 – Normalization Design
+Columns To Normalize
+
+Normalize only:
+
+all feature columns
+
+
+Exclude:
+
+target column
+
+Standardization Formula
+
+Apply:
+
+(x - mean) / std
+
+
+for each feature independently.
+
+Constant Columns
+
+Example:
+
+7
+7
+7
+7
+
+
+Then:
+
+std = 0
+
+Zero Standard Deviation
+Potential Behaviors
+
+Option A:
+
+Remove column.
+
+Option B:
+
+Convert entire column to zero.
+
+Recommended Behavior
+
+Convert all normalized values to:
+
+0
+
+
+Reason:
+
+Preserves column count.
+
+Avoids introducing infinities.
+
+Produces deterministic output.
+
+NaNs During Normalization
+
+If NaNs remain after filtering:
+
+Recommended Handling
+
+Abort.
+
+Reason:
+
+QUBO correlation computation later becomes unreliable.
+
+Large Datasets
+
+Requirements:
+
+Avoid unnecessary copies.
+Normalize column-wise.
+Prefer vectorized operations.
+Avoid row iteration.
+SECTION 5 – Scalability Analysis
+Dataset Size
+
+Evaluation dataset may exceed:
+
+1.5 million rows
+
+Memory Usage Estimate
+
+Example:
+
+1.5M rows
+145 columns
+float64
+
+
+Approximate raw memory:
+
+1.5M × 145 × 8
+≈ 1.74 GB
+
+
+Real dataframe usage is higher.
+
+Potentially:
+
+2–3 GB+
+
+
+after overhead.
+
+Pandas Limitations
+
+Potential issues:
+
+memory duplication
+temporary arrays
+multiple dataframe copies
+CSV Read Strategy
+
+Recommended:
+
+Single dataset load.
+Explicit dtypes.
+Avoid repeated parsing.
+Column Analysis Cost
+
+Feature-validity evaluation:
+
+O(rows × features)
+
+
+Reasonable.
+
+Normalization Cost
+
+Computing:
+
+means
+standard deviations
+
+also:
+
+O(rows × features)
+
+
+No major issue.
+
+Likely Bottlenecks
+Bottleneck 1
+
+Dataset loading.
+
+Bottleneck 2
+
+Memory duplication during normalization.
+
+Bottleneck 3
+
+CSV writing.
+
+Not elimination logic.
+
+Recommended Efficiency Measures
+Use Numeric Types
+
+Prefer:
+
+float32
+
+
+internally when acceptable.
+
+Avoid Intermediate DataFrames
+
+Modify selected columns in place whenever possible.
+
+Minimize Copies
+
+Avoid:
+
+df.copy()
+
+
+unless required.
+
+Compute Statistics Once
+
+Calculate:
+
+validity counts
+means
+std
+
+single time per column.
+
+SECTION 6 – Output CSV Design Review
+Column Order
+
+Recommended structure:
+
+feature_1
+feature_2
+...
+feature_n
+target
+
+
+Target remains last.
+
+Reason:
+
+Most convenient downstream processing.
+
+Header Behavior
+
+Must preserve headers.
+
+Header row required.
+
+Target Placement
+
+Target should remain present.
+
+Never normalized.
+
+Never renamed.
+
+Datatype Expectations
+
+Features:
+
+floating point
+
+
+Target:
+
+original datatype
+
+
+usually:
+
+0 / 1
+
+Reproducibility
+
+CSV export should:
+
+deterministic column order
+deterministic row order
+stable floating-point serialization
+
+No shuffling.
+
+No random operations.
+
+Expected Structure
+F1,F2,F3,...,Fn,target
+0.115,-0.991,...,1
+1.223,0.102,...,0
+...
+
+SECTION 7 – Output JSON Design Review
+n_input_features
+Meaning
+
+Number of original feature columns.
+
+Target excluded.
+
+Computation
+total_columns - 1
+
+Validation
+
+Must be positive.
+
+n_kept_features
+Meaning
+
+Remaining features after elimination.
+
+Computation
+
+Count after filtering.
+
+Validation
+0 <= kept <= input
+
+dataset_size
+Meaning
+
+Number of rows.
+
+Computation
+
+Dataset row count.
+
+Validation
+
+Positive.
+
+dataset_input_time
+Meaning
+
+Time spent reading CSV.
+
+Computation
+
+Measured duration.
+
+Validation
+
+Non-negative.
+
+dataset_processing_time
+Meaning
+
+Feature elimination + normalization duration.
+
+Validation
+
+Non-negative.
+
+dropped_feature_names
+Meaning
+
+Removed columns.
+
+Computation
+
+Feature names failing threshold.
+
+Validation
+
+Unique names.
+
+Edge Case
+
+Nothing dropped:
+
+"dropped_feature_names": []
+
+
+Valid.
+
+Edge Case
+
+Everything dropped:
+
+"n_kept_features": 0
+
+
+Should likely trigger preprocessing failure before output generation.
+
+SECTION 8 – CLI Design Review
+Required Command
+python preprocessing.py \
+ --input dataset.csv \
+ --target target \
+ --out-data normalized.csv \
+ --out-json preprocessing_result.json \
+ --min-perc-valid 0.05
+
+Parameter Parsing
+Required
+--input
+--target
+--out-data
+--out-json
+
+Optional
+--min-perc-valid
+
+
+Default:
+
+0.05
+
+Validation
+
+Validate:
+
+input exists
+target exists
+0 <= minPercValid <= 1
+
+Output Behavior
+
+On success:
+
+Create normalized CSV.
+Create JSON report.
+Return success exit code.
+Directory Creation
+
+Recommended:
+
+Automatically create missing parent directories for outputs.
+
+Prevents unnecessary failures.
+
+Failure Behavior
+
+Should:
+
+Produce clear message.
+Return non-zero exit code.
+Avoid partial outputs when possible.
+SECTION 9 – Testing Strategy
+Test 1 – Normal Dataset
+Input
+
+Valid numeric dataset.
+
+Verify
+CSV created
+JSON created
+target preserved
+Test 2 – Missing Values
+Input
+
+Columns with NaNs.
+
+Verify
+
+Correct feature elimination.
+
+Test 3 – Mostly-Zero Column
+Input
+
+96% zeros.
+
+Verify
+
+Column removed when threshold is 5%.
+
+Test 4 – Borderline Threshold
+Input
+
+Exactly 5% valid values.
+
+Verify
+
+Column survives.
+
+Test 5 – Constant Column
+Input
+
+All values identical.
+
+Verify
+
+Normalization handles std=0 safely.
+
+Test 6 – Invalid File
+Input
+
+Missing CSV path.
+
+Verify
+
+Explicit failure.
+
+Test 7 – Missing Target
+Input
+
+Target column absent.
+
+Verify
+
+Explicit failure.
+
+Test 8 – Duplicate Columns
+Input
+
+Repeated column names.
+
+Verify
+
+Validation failure.
+
+Test 9 – Infinite Values
+Input
+
+Contains infinities.
+
+Verify
+
+Processing rejected.
+
+Test 10 – Reproducibility
+Input
+
+Same dataset twice.
+
+Verify
+
+Generated CSV identical.
+
+Generated JSON identical except timing values.
+
+Test 11 – Large Dataset
+Input
+
+Synthetic large dataset.
+
+Verify
+
+Memory remains acceptable.
+
+Processing completes.
+
+SECTION 10 – Final Implementation Recommendation
+Recommended Processing Sequence
+Step 1
+
+Validate inputs.
+
+Step 2
+
+Load dataset.
+
+Step 3
+
+Validate dataset structure.
+
+Step 4
+
+Separate target column.
+
+Step 5
+
+Compute valid ratios.
+
+Step 6
+
+Determine dropped features.
+
+Step 7
+
+Validate at least one feature remains.
+
+Step 8
+
+Normalize remaining features.
+
+Step 9
+
+Handle constant columns safely.
+
+Step 10
+
+Reattach target column.
+
+Step 11
+
+Export normalized CSV.
+
+Step 12
+
+Generate statistics JSON.
+
+Recommended Libraries
+CSV Processing
+pandas
+Numerical Processing
+numpy
+Standardization
+scikit-learn StandardScaler
+or mathematically equivalent internal implementation if required by specification consistency
+Validation
+pandas
+numpy
+Timing
+time/perf-counter family
+Recommended Internal Helper Functions
+
+Logical responsibilities:
+
+Dataset Loading
+_load_dataset(...)
+
+Dataset Validation
+_validate_dataset(...)
+
+Feature Validity Evaluation
+_compute_valid_ratios(...)
+
+Feature Filtering
+_select_valid_features(...)
+
+Normalization
+_normalize_features(...)
+
+Report Generation
+_build_statistics(...)
+
+Output Writing
+_write_outputs(...)
+
+
+These are architectural responsibilities, not mandated names.
+
+Recommended Data Structures
+Dataset
+pandas DataFrame
+
+Dropped Features
+list[str]
+
+Statistics
+dict
+
+Column Metrics
+dict[str, float]
+
+Recommended Logging Strategy
+
+Log at INFO level:
+
+dataset loaded
+number of rows
+number of columns
+features removed
+features retained
+normalization completed
+outputs written
+
+Log at WARNING level:
+
+constant columns
+borderline threshold cases
+
+Log at ERROR level:
+
+invalid dataset
+missing target
+failed output creation
+
+No random behavior, no hidden assumptions, and no dataset reordering should occur. The preprocessing stage should be completely deterministic so that the same input dataset and parameters always produce the same normalized CSV and feature-elimination decisions.
