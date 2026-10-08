@@ -1,26 +1,8 @@
-
-
-"""
-model.py
-
-Supervised classification and prediction module for the ISW QUBO Classification project.
-
-Responsibilities:
-- Implement a classifier registry supporting random_forest, logistic_regression, and decision_tree.
-- Train the selected classifier on reduced datasets with reproducible seed handling.
-- Persist trained models and metadata using joblib.
-- Generate predictions, confidence scores, and comprehensive evaluation metrics.
-- Export training and classification statistics in JSON format.
-- Export test predictions in CSV format.
-- Provide a robust CLI interface supporting train and predict commands.
-"""
-
 from __future__ import annotations
 
-import argparse
+from datetime import datetime, timezone
 import json
 import logging
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -28,10 +10,12 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.base import ClassifierMixin
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
+    classification_report,
     confusion_matrix,
     precision_recall_fscore_support,
     roc_auc_score,
@@ -46,21 +30,108 @@ if not logging.getLogger().handlers:
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     )
 
-CLASSIFIER_REGISTRY = {
+CLASSIFIER_REGISTRY: dict[str, type[ClassifierMixin]] = {
     "random_forest": RandomForestClassifier,
     "logistic_regression": LogisticRegression,
     "decision_tree": DecisionTreeClassifier,
 }
 
 
-def _load_dataset(input_csv: str) -> pd.DataFrame:
+def _get_classifier(
+    classifier: str,
+    seed: int,
+) -> ClassifierMixin:
+    """
+    Instantiate a supported classifier with deterministic settings.
+
+    Parameters
+    ----------
+    classifier : str
+        Classifier name.
+    seed : int
+        Random seed.
+
+    Returns
+    -------
+    ClassifierMixin
+        Instantiated classifier.
+
+    Raises
+    ------
+    ValueError
+        If classifier is not supported.
+    """
+    if classifier not in CLASSIFIER_REGISTRY:
+        valid_names = ", ".join(sorted(CLASSIFIER_REGISTRY))
+        raise ValueError(
+            f"Unsupported classifier '{classifier}'. "
+            f"Supported classifiers: {valid_names}."
+        )
+    if classifier == "random_forest":
+        return RandomForestClassifier(
+            n_estimators=100,
+            random_state=seed,
+            n_jobs=-1,
+        )
+    if classifier == "logistic_regression":
+        return LogisticRegression(
+            random_state=seed,
+            max_iter=1000,
+        )
+    if classifier == "decision_tree":
+        return DecisionTreeClassifier(
+            random_state=seed,
+        )
+    valid_names = ", ".join(sorted(CLASSIFIER_REGISTRY))
+    raise ValueError(
+        f"Unsupported classifier '{classifier}'. "
+        f"Supported classifiers: {valid_names}."
+    )
+
+
+def _validate_csv_path(
+    csv_path: str,
+) -> Path:
+    """
+    Validate a CSV file path.
+
+    Parameters
+    ----------
+    csv_path : str
+        Path to CSV file.
+
+    Returns
+    -------
+    Path
+        Validated path.
+
+    Raises
+    ------
+    FileNotFoundError
+        If path does not exist or is not a file.
+    """
+    path = Path(csv_path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"CSV file does not exist: {path}"
+        )
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"CSV path is not a file: {path}"
+        )
+    return path
+
+
+def _load_dataset(
+    csv_path: str,
+) -> pd.DataFrame:
     """
     Load a CSV dataset.
 
     Parameters
     ----------
-    input_csv : str
-        Path to input CSV.
+    csv_path : str
+        Dataset path.
 
     Returns
     -------
@@ -69,181 +140,621 @@ def _load_dataset(input_csv: str) -> pd.DataFrame:
 
     Raises
     ------
-    FileNotFoundError
-        If the file does not exist.
     ValueError
-        If the CSV cannot be read or is empty.
+        If dataset cannot be loaded or is empty.
     """
-    path = Path(input_csv)
-
-    if not path.exists():
-        raise FileNotFoundError(f"Input CSV does not exist: '{input_csv}'")
-
-    if not path.is_file():
-        raise FileNotFoundError(f"Input path is not a file: '{input_csv}'")
-
+    path = _validate_csv_path(csv_path)
     try:
         df = pd.read_csv(path)
-        if df.empty or len(df.index) == 0:
-            raise ValueError(f"Dataset is empty: '{input_csv}'")
-        return df
     except Exception as exc:
-        if isinstance(exc, ValueError):
-            raise exc
-        raise ValueError(f"Failed to read CSV file '{input_csv}': {exc}") from exc
+        raise ValueError(
+            f"Failed to load dataset from '{path}'."
+        ) from exc
+    if df.empty:
+        raise ValueError(
+            f"Dataset is empty: {path}"
+        )
+    return df
 
 
-def _validate_train_inputs(
-    classifier: str,
+def _validate_target_column(
+    df: pd.DataFrame,
     target_column: str,
 ) -> None:
     """
-    Validate training configuration arguments.
-    """
-    if classifier not in CLASSIFIER_REGISTRY:
-        raise ValueError(
-            f"Unsupported classifier '{classifier}'. "
-            f"Supported classifiers: {list(CLASSIFIER_REGISTRY.keys())}"
-        )
+    Validate target column existence.
 
-    if not target_column:
-        raise ValueError("Target column name cannot be empty.")
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataset.
+    target_column : str
+        Target column name.
 
-
-def _validate_train_dataset(
-    df: pd.DataFrame,
-    target_column: str,
-) -> tuple[pd.DataFrame, pd.Series, list[str]]:
-    """
-    Validate training dataset structure, features, and target classes.
+    Raises
+    ------
+    ValueError
+        If target column is missing.
     """
     if target_column not in df.columns:
+        available_columns = ", ".join(df.columns.astype(str))
         raise ValueError(
-            f"Target column '{target_column}' does not exist in the training dataset."
+            f"Target column '{target_column}' not found. "
+            f"Available columns: {available_columns}"
         )
 
-    feature_columns = [c for c in df.columns if c != target_column]
 
+def _validate_training_dataset(
+    df: pd.DataFrame,
+    target_column: str,
+) -> None:
+    """
+    Validate a training dataset.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataset.
+    target_column : str
+        Target column name.
+
+    Raises
+    ------
+    ValueError
+        If dataset validation fails.
+    """
+    if df.empty:
+        raise ValueError(
+            "Training dataset is empty."
+        )
+    _validate_target_column(
+        df=df,
+        target_column=target_column,
+    )
+    if df.columns.duplicated().any():
+        duplicated_columns = (
+            df.columns[df.columns.duplicated()]
+            .astype(str)
+            .tolist()
+        )
+        raise ValueError(
+            "Training dataset contains duplicate columns: "
+            f"{duplicated_columns}"
+        )
+    feature_columns = [
+        column
+        for column in df.columns
+        if column != target_column
+    ]
     if not feature_columns:
-        raise ValueError("Training dataset contains no feature columns.")
-
-    target_series = df[target_column]
-    unique_classes = target_series.dropna().unique()
-
+        raise ValueError(
+            "Training dataset contains no feature columns."
+        )
+    target = df[target_column]
+    unique_classes = target.dropna().unique()
     if len(unique_classes) < 2:
         raise ValueError(
-            f"Training target column '{target_column}' must contain at least 2 classes, "
-            f"found {len(unique_classes)} class(es): {unique_classes}"
+            "Training target must contain at least two classes."
         )
 
-    return df[feature_columns], target_series, feature_columns
+
+def _validate_prediction_dataset(
+    df: pd.DataFrame,
+    target_column: str,
+) -> None:
+    """
+    Validate a prediction dataset.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataset.
+    target_column : str
+        Target column name.
+
+    Raises
+    ------
+    ValueError
+        If dataset validation fails.
+    """
+    if df.empty:
+        raise ValueError(
+            "Prediction dataset is empty."
+        )
+    _validate_target_column(
+        df=df,
+        target_column=target_column,
+    )
+    feature_columns = [
+        column
+        for column in df.columns
+        if column != target_column
+    ]
+    if not feature_columns:
+        raise ValueError(
+            "Prediction dataset contains no feature columns."
+        )
 
 
-def train(
+def _split_features_target(
+    df: pd.DataFrame,
+    target_column: str,
+) -> tuple[pd.DataFrame, pd.Series]:
+    """
+    Split a dataset into features and target.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataset.
+    target_column : str
+        Target column.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.Series]
+        Features and target.
+    """
+    X = df.drop(columns=[target_column])
+    y = df[target_column]
+    return X, y
+
+
+def _ensure_parent(
+    path: str,
+) -> None:
+    """
+    Ensure parent directory exists.
+
+    Parameters
+    ----------
+    path : str
+        Output path.
+    """
+    Path(path).parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+
+def _get_target_distribution(
+    target: pd.Series,
+) -> dict[str, int]:
+    """
+    Compute target class distribution.
+
+    Parameters
+    ----------
+    target : pd.Series
+        Target vector.
+
+    Returns
+    -------
+    dict[str, int]
+        Class counts.
+    """
+    counts = target.value_counts(dropna=False)
+    return {
+        str(label): int(count)
+        for label, count in counts.items()
+    }
+
+
+def _get_library_metadata() -> dict[str, Any]:
+    """
+    Collect runtime library metadata.
+
+    Returns
+    -------
+    dict[str, Any]
+        Library versions.
+    """
+    import sklearn
+    return {
+        "pandas_version": pd.__version__,
+        "numpy_version": np.__version__,
+        "sklearn_version": sklearn.__version__,
+    }
+
+
+def _build_training_metrics(
+    classifier_name: str,
+    seed: int,
+    X: pd.DataFrame,
+    y: pd.Series,
+    training_time_seconds: float,
+) -> dict[str, Any]:
+    return {
+        "classifier": classifier_name,
+        "seed": seed,
+        "n_samples": int(len(X)),
+        "n_features": int(X.shape[1]),
+        "target_distribution": _get_target_distribution(y),
+        "training_time_seconds": round(
+            float(training_time_seconds),
+            6,
+        ),
+    }
+
+
+def _safe_roc_auc(
+    y_true: pd.Series,
+    y_score: np.ndarray,
+) -> float | None:
+    unique_classes = pd.Series(y_true).dropna().unique()
+    if len(unique_classes) < 2:
+        LOGGER.warning(
+            "ROC-AUC cannot be computed because the evaluation "
+            "target contains fewer than two classes."
+        )
+        return None
+    try:
+        return float(
+            roc_auc_score(
+                y_true,
+                y_score,
+            )
+        )
+    except ValueError:
+        LOGGER.warning(
+            "ROC-AUC computation failed due to invalid class "
+            "distribution."
+        )
+        return None
+
+
+def _build_class_metrics(
+    y_true: pd.Series,
+    y_pred: np.ndarray,
+) -> dict[str, Any]:
+    precision, recall, f1, _ = (
+        precision_recall_fscore_support(
+            y_true,
+            y_pred,
+            labels=[0, 1],
+            zero_division=0,
+        )
+    )
+    return {
+        "class_0": {
+            "precision": float(precision[0]),
+            "recall": float(recall[0]),
+            "f1": float(f1[0]),
+        },
+        "class_1": {
+            "precision": float(precision[1]),
+            "recall": float(recall[1]),
+            "f1": float(f1[1]),
+        },
+    }
+
+
+def _build_prediction_metrics(
+    y_true: pd.Series,
+    y_pred: np.ndarray,
+    y_score: np.ndarray,
+) -> dict[str, Any]:
+    metrics = {
+        "accuracy": float(
+            accuracy_score(
+                y_true,
+                y_pred,
+            )
+        ),
+        "roc_auc": _safe_roc_auc(
+            y_true,
+            y_score,
+        ),
+        "confusion_matrix": confusion_matrix(
+            y_true,
+            y_pred,
+            labels=[0, 1],
+        ).tolist(),
+    }
+    metrics.update(
+        _build_class_metrics(
+            y_true,
+            y_pred,
+        )
+    )
+    return metrics
+
+
+def _write_json(
+    payload: dict[str, Any],
+    output_path: str,
+) -> None:
+    _ensure_parent(output_path)
+    with Path(output_path).open(
+        mode="w",
+        encoding="utf-8",
+    ) as output_file:
+        json.dump(
+            payload,
+            output_file,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+    LOGGER.info(
+        "JSON artifact written to '%s'.",
+        output_path,
+    )
+
+
+def _build_model_artifact(
+    estimator: ClassifierMixin,
+    classifier_name: str,
+    feature_names: list[str],
+    seed: int,
+) -> dict[str, Any]:
+    return {
+        "estimator": estimator,
+        "classifier_name": classifier_name,
+        "feature_names": feature_names,
+        "seed": seed,
+        "metadata": {
+            "training_timestamp": datetime.now(
+                timezone.utc
+            ).isoformat(),
+            "library_versions": _get_library_metadata(),
+        },
+    }
+
+
+def _save_model(
+    artifact: dict[str, Any],
+    model_path: str,
+) -> None:
+    try:
+        _ensure_parent(model_path)
+        joblib.dump(
+            artifact,
+            model_path,
+            compress=3,
+        )
+        LOGGER.info(
+            "Model artifact saved to '%s'.",
+            model_path,
+        )
+    except Exception:
+        LOGGER.error(
+            "Failed to save model artifact to '%s'.",
+            model_path,
+            exc_info=True,
+        )
+        raise
+
+
+def _load_model(
+    model_path: str,
+) -> dict[str, Any]:
+    path = Path(model_path)
+    if not path.exists() or not path.is_file():
+        raise FileNotFoundError(
+            f"Model file does not exist: {model_path}"
+        )
+    artifact = joblib.load(path)
+    if not isinstance(artifact, dict):
+        raise ValueError(
+            "Loaded model artifact must be a dictionary."
+        )
+    required_keys = {
+        "estimator",
+        "classifier_name",
+        "feature_names",
+    }
+    missing_keys = sorted(
+        required_keys.difference(artifact.keys())
+    )
+    if missing_keys:
+        raise ValueError(
+            "Invalid model artifact. Missing keys: "
+            f"{missing_keys}"
+        )
+    LOGGER.info(
+        "Model artifact loaded from '%s'.",
+        model_path,
+    )
+    return artifact
+
+
+def _validate_feature_compatibility(
+    model_feature_names: list[str],
+    dataset_feature_names: list[str],
+) -> None:
+    model_set = set(model_feature_names)
+    dataset_set = set(dataset_feature_names)
+    missing_features = sorted(
+        model_set - dataset_set
+    )
+    unexpected_features = sorted(
+        dataset_set - model_set
+    )
+    errors: list[str] = []
+    if len(model_feature_names) != len(dataset_feature_names):
+        errors.append(
+            "Feature count mismatch "
+            f"(model={len(model_feature_names)}, "
+            f"dataset={len(dataset_feature_names)})"
+        )
+    if missing_features:
+        errors.append(
+            f"Missing features: {missing_features}"
+        )
+    if unexpected_features:
+        errors.append(
+            f"Unexpected features: {unexpected_features}"
+        )
+    if not errors and model_feature_names != dataset_feature_names:
+        errors.append(
+            "Feature order mismatch between model and dataset."
+        )
+    if errors:
+        message = " | ".join(errors)
+        LOGGER.error(
+            "Feature compatibility validation failed: %s",
+            message,
+        )
+        raise ValueError(
+            f"Feature compatibility validation failed. {message}"
+        )
+        
+        def train(
     classifier: str,
     reducedTrain_csv: str,
     target_column: str,
     model_path: str,
     metrics_json: str,
     seed: int = 42,
-) -> dict[str, Any]:
-    """
-    Train a supervised classification model using the reduced dataset.
-
-    Parameters
-    ----------
-    classifier : str
-        Selected classifier name from registry.
-    reducedTrain_csv : str
-        Path to reduced training dataset.
-    target_column : str
-        Binary target column name.
-    model_path : str
-        Output serialized model path (.joblib).
-    metrics_json : str
-        Output training metrics JSON path.
-    seed : int, default=42
-        Random seed for reproducibility.
-
-    Returns
-    -------
-    dict
-        Training metrics and metadata dictionary.
-    """
-    _validate_train_inputs(classifier, target_column)
-
-    start_input = time.perf_counter()
-    df = _load_dataset(reducedTrain_csv)
-    dataset_input_time = time.perf_counter() - start_input
-
-    X, y, feature_names = _validate_train_dataset(df, target_column)
-
-    LOGGER.info(
-        "Training classifier '%s' on %s rows and %s features.",
-        classifier,
-        len(df.index),
-        len(feature_names),
-    )
-
-    clf_class = CLASSIFIER_REGISTRY[classifier]
-    
-    # Instantiate classifier with random seed support where applicable
+) -> None:
     try:
-        clf = clf_class(random_state=seed)
-    except TypeError:
-        # Fallback if estimator does not accept random_state
-        clf = clf_class()
+        LOGGER.info(
+            "Training started | classifier=%s | dataset=%s",
+            classifier,
+            reducedTrain_csv,
+        )
 
-    training_start = time.perf_counter()
-    clf.fit(X, y)
-    training_time = time.perf_counter() - training_start
+        df = _load_dataset(reducedTrain_csv)
 
-    # Compute training accuracy
-    y_pred_train = clf.predict(X)
-    train_accuracy = float(accuracy_score(y, y_pred_train))
+        LOGGER.info(
+            "Dataset loaded | rows=%s | columns=%s",
+            len(df),
+            len(df.columns),
+        )
 
-    target_1_count = int((y == 1).sum())
-    target_1_percentage = float((target_1_count / len(y)) * 100)
+        _validate_training_dataset(
+            df=df,
+            target_column=target_column,
+        )
 
-    metrics = {
-        "classifier": classifier,
-        "seed": seed,
-        "training_dataset": str(Path(reducedTrain_csv).name),
-        "target_column": target_column,
-        "model_path": str(Path(model_path).name),
-        "n_samples": int(len(df.index)),
-        "n_features": int(len(feature_names)),
-        "target_1_percentage": round(target_1_percentage, 2),
-        "dataset_input_time": round(float(dataset_input_time), 4),
-        "training_time": round(float(training_time), 4),
-        "accuracy": round(train_accuracy, 6),
-    }
+        X, y = _split_features_target(
+            df=df,
+            target_column=target_column,
+        )
 
-    # Prepare model artifact package containing estimator, features, and metadata
-    model_package = {
-        "estimator": clf,
-        "classifier_name": classifier,
-        "feature_names": feature_names,
-        "seed": seed,
-        "metadata": metrics,
-    }
+        if len(X.columns) <= 0:
+            raise ValueError(
+                "Training dataset contains no feature columns."
+            )
 
-    # Ensure parent directories exist
-    Path(model_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(metrics_json).parent.mkdir(parents=True, exist_ok=True)
+        if y.nunique() < 2:
+            raise ValueError(
+                "Training target must contain at least two classes."
+            )
 
-    try:
-        joblib.dump(model_package, model_path)
-        LOGGER.info("Model saved successfully to '%s'.", model_path)
+        class_distribution = y.value_counts(normalize=True)
 
-        with open(metrics_json, "w", encoding="utf-8") as f:
-            json.dump(metrics, f, indent=2)
-        LOGGER.info("Training metrics exported successfully to '%s'.", metrics_json)
+        if not class_distribution.empty:
+            min_frequency = float(class_distribution.min())
 
-    except Exception as exc:
-        raise RuntimeError(f"Failed to persist model or metrics: {exc}") from exc
+            if min_frequency < 0.05:
+                LOGGER.warning(
+                    "Class imbalance detected | "
+                    "smallest_class_frequency=%.6f",
+                    min_frequency,
+                )
 
-    return metrics
+        estimator = _get_classifier(
+            classifier=classifier,
+            seed=seed,
+        )
+
+        LOGGER.info(
+            "Classifier selected | classifier=%s",
+            classifier,
+        )
+
+        LOGGER.info(
+            "Training in progress | classifier=%s",
+            classifier,
+        )
+
+        training_start = time.perf_counter()
+
+        try:
+            estimator.fit(X, y)
+        except Exception:
+            LOGGER.error(
+                "Model training failed.",
+                exc_info=True,
+            )
+            raise
+
+        training_end = time.perf_counter()
+        training_time_seconds = (
+            training_end - training_start
+        )
+
+        y_pred = estimator.predict(X)
+
+        training_accuracy = float(
+            accuracy_score(
+                y,
+                y_pred,
+            )
+        )
+
+        training_metrics = _build_training_metrics(
+            classifier_name=classifier,
+            seed=seed,
+            X=X,
+            y=y,
+            training_time_seconds=training_time_seconds,
+        )
+
+        training_metrics["accuracy"] = training_accuracy
+
+        artifact = _build_model_artifact(
+            estimator=estimator,
+            classifier_name=classifier,
+            feature_names=list(X.columns),
+            seed=seed,
+        )
+
+        _save_model(
+            artifact=artifact,
+            model_path=model_path,
+        )
+
+        LOGGER.info(
+            "Model saved | path=%s",
+            model_path,
+        )
+
+        _write_json(
+            payload=training_metrics,
+            output_path=metrics_json,
+        )
+
+        LOGGER.info(
+            "Metrics exported | path=%s",
+            metrics_json,
+        )
+
+        LOGGER.info(
+            "Training completed successfully | "
+            "classifier=%s | rows=%s | features=%s | "
+            "training_time_seconds=%.6f",
+            classifier,
+            len(X),
+            X.shape[1],
+            training_time_seconds,
+        )
+
+    except Exception:
+        LOGGER.error(
+            "Training workflow failed.",
+            exc_info=True,
+        )
+        raise
+
+
+__all__ = [
+    "train",
+]
+import argparse
+import sys
 
 
 def predict(
@@ -252,235 +763,205 @@ def predict(
     model_path: str,
     predictions_csv: str,
     classif_stats_json: str,
-) -> dict[str, Any]:
-    """
-    Generate predictions and evaluation metrics using a previously trained model.
-
-    Parameters
-    ----------
-    reduced_Test_csv : str
-        Path to reduced test dataset.
-    target_column : str
-        Ground-truth target column name.
-    model_path : str
-        Path to serialized model artifact (.joblib).
-    predictions_csv : str
-        Output predictions CSV path.
-    classif_stats_json : str
-        Output classification statistics JSON path.
-
-    Returns
-    -------
-    dict
-        Classification statistics dictionary.
-    """
-    model_file = Path(model_path)
-    if not model_file.exists():
-        raise FileNotFoundError(f"Model file does not exist: '{model_path}'")
-
+) -> None:
     try:
-        model_package = joblib.load(model_file)
-    except Exception as exc:
-        raise RuntimeError(f"Failed to load or corrupted model artifact '{model_path}': {exc}") from exc
-
-    if not isinstance(model_package, dict) or "estimator" not in model_package or "feature_names" not in model_package:
-        raise ValueError(f"Model artifact '{model_path}' has invalid structure or wrong object type.")
-
-    estimator = model_package["estimator"]
-    expected_features = model_package["feature_names"]
-    classifier_name = model_package.get("classifier_name", "unknown")
-
-    df_test = _load_dataset(reduced_Test_csv)
-
-    if target_column not in df_test.columns:
-        raise ValueError(f"Target column '{target_column}' not found in test dataset.")
-
-    # Validate feature compatibility
-    test_feature_cols = [c for c in df_test.columns if c != target_column]
-    if set(test_feature_cols) != set(expected_features):
-        missing = set(expected_features) - set(test_feature_cols)
-        extra = set(test_feature_cols) - set(expected_features)
-        raise ValueError(
-            f"Feature mismatch between trained model and test dataset. "
-            f"Missing features: {missing}, Extra features: {extra}"
+        LOGGER.info(
+            "Prediction started | dataset=%s | model=%s",
+            reduced_Test_csv,
+            model_path,
         )
 
-    # Align feature columns to exact training order
-    X_test = df_test[expected_features]
-    y_true = df_test[target_column]
+        df = _load_dataset(reduced_Test_csv)
 
-    LOGGER.info("Generating predictions for %s test samples using '%s'.", len(df_test.index), classifier_name)
+        _validate_prediction_dataset(
+            df=df,
+            target_column=target_column,
+        )
 
-    y_pred = estimator.predict(X_test)
+        X, y_true = _split_features_target(
+            df=df,
+            target_column=target_column,
+        )
 
-    # Generate confidence scores for class 1
-    if hasattr(estimator, "predict_proba"):
-        probs = estimator.predict_proba(X_test)
-        if probs.shape[1] > 1:
-            scores = probs[:, 1]
-        else:
-            scores = probs[:, 0]
-    else:
-        # Fallback decision function or zero scores if probabilities unavailable
-        if hasattr(estimator, "decision_function"):
-            dec = estimator.decision_function(X_test)
-            scores = 1 / (1 + np.exp(-dec))
-        else:
-            scores = np.zeros(len(y_pred), dtype=float)
+        artifact = _load_model(model_path)
 
-    # Export predictions CSV (row_n, target, prediction, score)[cite: 8]
-    pred_df = pd.DataFrame(
-        {
-            "row_n": range(len(df_test.index)),
-            "target": y_true.values,
-            "prediction": y_pred,
-            "score": scores,
-        }
-    )
+        estimator = artifact["estimator"]
+        feature_names = artifact["feature_names"]
+        classifier_name = artifact["classifier_name"]
 
-    Path(predictions_csv).parent.mkdir(parents=True, exist_ok=True)
-    pred_df.to_csv(predictions_csv, index=False)
-    LOGGER.info("Predictions saved to '%s'.", predictions_csv)
+        _validate_feature_compatibility(
+            model_feature_names=feature_names,
+            dataset_feature_names=list(X.columns),
+        )
 
-    # Compute evaluation metrics
-    accuracy = float(accuracy_score(y_true, y_pred))
-    
-    precision, recall, f1, support = precision_recall_fscore_support(
-        y_true, y_pred, labels=[0, 1], zero_division=0
-    )
+        y_pred = estimator.predict(X)
 
-    # Compute ROC-AUC (handle single-class edge case gracefully)[cite: 8]
-    try:
-        if len(np.unique(y_true)) > 1:
-            roc_auc = float(roc_auc_score(y_true, scores))
-        else:
-            LOGGER.warning("ROC-AUC skipped due to single-class test set.")
-            roc_auc = 0.0
+        try:
+            if hasattr(estimator, "predict_proba"):
+                y_score = estimator.predict_proba(X)[:, 1]
+            elif hasattr(estimator, "decision_function"):
+                raw_scores = estimator.decision_function(X)
+
+                score_min = float(np.min(raw_scores))
+                score_max = float(np.max(raw_scores))
+
+                if score_max > score_min:
+                    y_score = (
+                        (raw_scores - score_min)
+                        / (score_max - score_min)
+                    )
+                else:
+                    y_score = np.zeros(
+                        len(y_pred),
+                        dtype=float,
+                    )
+            else:
+                LOGGER.warning(
+                    "Estimator does not expose probability "
+                    "scores. Using zero scores."
+                )
+                y_score = np.zeros(
+                    len(y_pred),
+                    dtype=float,
+                )
+
+        except Exception:
+            LOGGER.warning(
+                "Failed to compute prediction scores. "
+                "Using zero scores.",
+                exc_info=True,
+            )
+            y_score = np.zeros(
+                len(y_pred),
+                dtype=float,
+            )
+
+        metrics = _build_prediction_metrics(
+            y_true=y_true,
+            y_pred=y_pred,
+            y_score=y_score,
+        )
+
+        predictions_df = pd.DataFrame(
+            {
+                "row_n": range(len(df)),
+                "target": y_true,
+                "prediction": y_pred,
+                "score": y_score,
+            }
+        )
+
+        _ensure_parent(predictions_csv)
+
+        predictions_df.to_csv(
+            predictions_csv,
+            index=False,
+        )
+
+        _write_json(
+            payload=metrics,
+            output_path=classif_stats_json,
+        )
+
+        LOGGER.info(
+            "Prediction completed successfully | "
+            "classifier=%s | rows=%s | "
+            "predictions=%s | stats=%s",
+            classifier_name,
+            len(df),
+            predictions_csv,
+            classif_stats_json,
+        )
+
     except Exception:
-        roc_auc = 0.0
-
-    cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
-
-    target_1_count = int((y_true == 1).sum())
-    target_1_percentage = float((target_1_count / len(y_true)) * 100) if len(y_true) > 0 else 0.0
-
-    stats = {
-        "classifier": classifier_name,
-        "n_samples": int(len(df_test.index)),
-        "target_1_count": target_1_count,
-        "target_1_percentage": round(target_1_percentage, 2),
-        "accuracy": accuracy,
-        "class_0": {
-            "precision": float(precision[0]),
-            "recall": float(recall[0]),
-            "f1": float(f1[0]),
-            "support": int(support[0]),
-        },
-        "class_1": {
-            "precision": float(precision[1]),
-            "recall": float(recall[1]),
-            "f1": float(f1[1]),
-            "support": int(support[1]),
-        },
-        "roc_auc": roc_auc,
-        "confusion_matrix": {
-            "labels": [0, 1],
-            "matrix": cm.tolist(),
-        },
-    }
-
-    Path(classif_stats_json).parent.mkdir(parents=True, exist_ok=True)
-    with open(classif_stats_json, "w", encoding="utf-8") as f:
-        json.dump(stats, f, indent=2)
-
-    LOGGER.info("Classification statistics saved to '%s'.", classif_stats_json)
-
-    return stats
+        LOGGER.error(
+            "Prediction workflow failed.",
+            exc_info=True,
+        )
+        raise
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """
-    Build CLI argument parser supporting train and predict subcommands.
-    """
     parser = argparse.ArgumentParser(
-        description="Supervised model training and prediction module."
+        description="QUBO Classification Model Utilities"
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # Train command parser
-    train_parser = subparsers.add_parser("train", help="Train a classifier.")
+    subparsers = parser.add_subparsers(
+        dest="command",
+    )
+
+    train_parser = subparsers.add_parser(
+        "train",
+        help="Train a classification model.",
+    )
+
     train_parser.add_argument(
         "--classifier",
         required=True,
-        choices=list(CLASSIFIER_REGISTRY.keys()),
-        help="Classifier name to train.",
     )
     train_parser.add_argument(
         "--in-reduced",
+        dest="in_reduced",
         required=True,
-        help="Path to reduced training dataset CSV.",
     )
     train_parser.add_argument(
         "--target",
         required=True,
-        help="Target column name.",
     )
     train_parser.add_argument(
         "--out-model",
+        dest="out_model",
         required=True,
-        help="Output serialized model path (.joblib).",
     )
     train_parser.add_argument(
         "--out-metrics",
+        dest="out_metrics",
         required=True,
-        help="Output training metrics JSON path.",
     )
     train_parser.add_argument(
         "--seed",
         type=int,
         default=42,
-        help="Random seed for reproducibility.",
     )
 
-    # Predict command parser
-    predict_parser = subparsers.add_parser("predict", help="Generate predictions using a trained model.")
+    predict_parser = subparsers.add_parser(
+        "predict",
+        help="Run model predictions.",
+    )
+
     predict_parser.add_argument(
         "--input-testset",
+        dest="input_testset",
         required=True,
-        help="Path to reduced test dataset CSV.",
     )
     predict_parser.add_argument(
         "--target",
         required=True,
-        help="Ground-truth target column name.",
     )
     predict_parser.add_argument(
         "--model",
         required=True,
-        help="Path to serialized model (.joblib).",
     )
     predict_parser.add_argument(
         "--out-predictions",
+        dest="out_predictions",
         required=True,
-        help="Output predictions CSV path.",
     )
     predict_parser.add_argument(
         "--out-stats",
+        dest="out_stats",
         required=True,
-        help="Output classification statistics JSON path.",
     )
 
     return parser
 
 
 def main() -> int:
-    """
-    CLI entry point.
-    """
     parser = _build_parser()
-    args = parser.parse_args()
 
     try:
+        args = parser.parse_args()
+
         if args.command == "train":
             train(
                 classifier=args.classifier,
@@ -490,7 +971,9 @@ def main() -> int:
                 metrics_json=args.out_metrics,
                 seed=args.seed,
             )
-        elif args.command == "predict":
+            return 0
+
+        if args.command == "predict":
             predict(
                 reduced_Test_csv=args.input_testset,
                 target_column=args.target,
@@ -498,19 +981,32 @@ def main() -> int:
                 predictions_csv=args.out_predictions,
                 classif_stats_json=args.out_stats,
             )
-        else:
-            parser.print_help()
-            return 1
+            return 0
 
-        return 0
-
-    except Exception as exc:
-        LOGGER.error("%s", exc)
-        print(f"ERROR: {exc}", file=sys.stderr)
+        parser.print_help()
         return 1
+
+    except ValueError:
+        LOGGER.error(
+            "Validation error occurred.",
+            exc_info=True,
+        )
+        return 1
+
+    except Exception:
+        LOGGER.error(
+            "Runtime failure occurred.",
+            exc_info=True,
+        )
+        return 2
+
+
+__all__ = [
+    "train",
+    "predict",
+    "main",
+]
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
-```
