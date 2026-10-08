@@ -4,8 +4,11 @@ from datetime import datetime, timezone
 import json
 import logging
 import time
+import argparse
+import sys
 from pathlib import Path
 from typing import Any
+
 
 import joblib
 import numpy as np
@@ -600,161 +603,154 @@ def _validate_feature_compatibility(
             f"Feature compatibility validation failed. {message}"
         )
         
-        def train(
-    classifier: str,
-    reducedTrain_csv: str,
-    target_column: str,
-    model_path: str,
-    metrics_json: str,
-    seed: int = 42,
-) -> None:
-    try:
-        LOGGER.info(
-            "Training started | classifier=%s | dataset=%s",
-            classifier,
-            reducedTrain_csv,
-        )
-
-        df = _load_dataset(reducedTrain_csv)
-
-        LOGGER.info(
-            "Dataset loaded | rows=%s | columns=%s",
-            len(df),
-            len(df.columns),
-        )
-
-        _validate_training_dataset(
-            df=df,
-            target_column=target_column,
-        )
-
-        X, y = _split_features_target(
-            df=df,
-            target_column=target_column,
-        )
-
-        if len(X.columns) <= 0:
-            raise ValueError(
-                "Training dataset contains no feature columns."
+    def train(
+        classifier: str,
+        reducedTrain_csv: str,
+        target_column: str,
+        model_path: str,
+        metrics_json: str,
+        seed: int = 42,
+    ) -> None:
+        try:
+            LOGGER.info(
+                "Training started | classifier=%s | dataset=%s",
+                classifier,
+                reducedTrain_csv,
             )
 
-        if y.nunique() < 2:
-            raise ValueError(
-                "Training target must contain at least two classes."
+            df = _load_dataset(reducedTrain_csv)
+
+            LOGGER.info(
+                "Dataset loaded | rows=%s | columns=%s",
+                len(df),
+                len(df.columns),
             )
 
-        class_distribution = y.value_counts(normalize=True)
+            _validate_training_dataset(
+                df=df,
+                target_column=target_column,
+            )
 
-        if not class_distribution.empty:
-            min_frequency = float(class_distribution.min())
+            X, y = _split_features_target(
+                df=df,
+                target_column=target_column,
+            )
 
-            if min_frequency < 0.05:
-                LOGGER.warning(
-                    "Class imbalance detected | "
-                    "smallest_class_frequency=%.6f",
-                    min_frequency,
+            if len(X.columns) <= 0:
+                raise ValueError(
+                    "Training dataset contains no feature columns."
                 )
 
-        estimator = _get_classifier(
-            classifier=classifier,
-            seed=seed,
-        )
+            if y.nunique() < 2:
+                raise ValueError(
+                    "Training target must contain at least two classes."
+                )
 
-        LOGGER.info(
-            "Classifier selected | classifier=%s",
-            classifier,
-        )
+            class_distribution = y.value_counts(normalize=True)
 
-        LOGGER.info(
-            "Training in progress | classifier=%s",
-            classifier,
-        )
+            if not class_distribution.empty:
+                min_frequency = float(class_distribution.min())
 
-        training_start = time.perf_counter()
+                if min_frequency < 0.05:
+                    LOGGER.warning(
+                        "Class imbalance detected | "
+                        "smallest_class_frequency=%.6f",
+                        min_frequency,
+                    )
 
-        try:
-            estimator.fit(X, y)
+            estimator = _get_classifier(
+                classifier=classifier,
+                seed=seed,
+            )
+
+            LOGGER.info(
+                "Classifier selected | classifier=%s",
+                classifier,
+            )
+
+            LOGGER.info(
+                "Training in progress | classifier=%s",
+                classifier,
+            )
+
+            training_start = time.perf_counter()
+
+            try:
+                estimator.fit(X, y)
+            except Exception:
+                LOGGER.error(
+                    "Model training failed.",
+                    exc_info=True,
+                )
+                raise
+
+            training_end = time.perf_counter()
+            training_time_seconds = (
+                training_end - training_start
+            )
+
+            y_pred = estimator.predict(X)
+
+            training_accuracy = float(
+                accuracy_score(
+                    y,
+                    y_pred,
+                )
+            )
+
+            training_metrics = _build_training_metrics(
+                classifier_name=classifier,
+                seed=seed,
+                X=X,
+                y=y,
+                training_time_seconds=training_time_seconds,
+            )
+
+            training_metrics["accuracy"] = training_accuracy
+
+            artifact = _build_model_artifact(
+                estimator=estimator,
+                classifier_name=classifier,
+                feature_names=list(X.columns),
+                seed=seed,
+            )
+
+            _save_model(
+                artifact=artifact,
+                model_path=model_path,
+            )
+
+            LOGGER.info(
+                "Model saved | path=%s",
+                model_path,
+            )
+
+            _write_json(
+                payload=training_metrics,
+                output_path=metrics_json,
+            )
+
+            LOGGER.info(
+                "Metrics exported | path=%s",
+                metrics_json,
+            )
+
+            LOGGER.info(
+                "Training completed successfully | "
+                "classifier=%s | rows=%s | features=%s | "
+                "training_time_seconds=%.6f",
+                classifier,
+                len(X),
+                X.shape[1],
+                training_time_seconds,
+            )
+
         except Exception:
             LOGGER.error(
-                "Model training failed.",
+                "Training workflow failed.",
                 exc_info=True,
             )
             raise
-
-        training_end = time.perf_counter()
-        training_time_seconds = (
-            training_end - training_start
-        )
-
-        y_pred = estimator.predict(X)
-
-        training_accuracy = float(
-            accuracy_score(
-                y,
-                y_pred,
-            )
-        )
-
-        training_metrics = _build_training_metrics(
-            classifier_name=classifier,
-            seed=seed,
-            X=X,
-            y=y,
-            training_time_seconds=training_time_seconds,
-        )
-
-        training_metrics["accuracy"] = training_accuracy
-
-        artifact = _build_model_artifact(
-            estimator=estimator,
-            classifier_name=classifier,
-            feature_names=list(X.columns),
-            seed=seed,
-        )
-
-        _save_model(
-            artifact=artifact,
-            model_path=model_path,
-        )
-
-        LOGGER.info(
-            "Model saved | path=%s",
-            model_path,
-        )
-
-        _write_json(
-            payload=training_metrics,
-            output_path=metrics_json,
-        )
-
-        LOGGER.info(
-            "Metrics exported | path=%s",
-            metrics_json,
-        )
-
-        LOGGER.info(
-            "Training completed successfully | "
-            "classifier=%s | rows=%s | features=%s | "
-            "training_time_seconds=%.6f",
-            classifier,
-            len(X),
-            X.shape[1],
-            training_time_seconds,
-        )
-
-    except Exception:
-        LOGGER.error(
-            "Training workflow failed.",
-            exc_info=True,
-        )
-        raise
-
-
-__all__ = [
-    "train",
-]
-import argparse
-import sys
 
 
 def predict(
@@ -1010,3 +1006,4 @@ __all__ = [
 
 if __name__ == "__main__":
     sys.exit(main())
+     
