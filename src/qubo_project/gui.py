@@ -662,7 +662,8 @@ class QuboClassificationGUI:
                 str(exc),
             )
 
-            def _display_json(
+    # CORRETTO: Spostato fuori dal blocco except, al livello corretto della classe
+    def _display_json(
         self,
         widget: tk.Text,
         json_path: Path,
