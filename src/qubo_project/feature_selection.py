@@ -26,7 +26,7 @@ def _configure_logging() -> None:
     if not logging.getLogger().handlers:
         logging.basicConfig(
             level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(message)s",
+            format="%(asctime)s | %(levelname)s | %(message)s",
         )
 
 
@@ -169,9 +169,11 @@ def _solve_qubo(
     )
 
     best = sample_set.first.sample
+    n_features = q.shape[0]
 
+    # CORRETTO: Garantisce che il vettore copra sempre tutte le feature (default a 0 se omesse dal sampler)
     vector = np.array(
-        [int(best[i]) for i in range(len(best))],
+        [int(best.get(k, 0)) for k in range(n_features)],
         dtype=int,
     )
 
@@ -286,10 +288,6 @@ def select_features(
     seed: int = 42,
     alpha_computations: int = 100,
 ):
-    """
-    QUBO-based feature selection using Spearman correlations and
-    simulated annealing.
-    """
     _configure_logging()
 
     _validate_inputs(

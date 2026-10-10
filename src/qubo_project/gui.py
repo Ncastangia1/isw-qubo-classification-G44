@@ -726,7 +726,7 @@ class QuboClassificationGUI:
                     normalized_csv=str(
                         normalized_csv
                     ),
-                    outInitialRes_json=str(
+                    outInitalRes_json=str(
                         result_json
                     ),
                     minPercValid=float(

@@ -1,0 +1,231 @@
+2026-10-10 18:50:03,589 | INFO | __main__ | Dataset preview loaded.
+2026-10-10 18:50:34,227 | ERROR | __main__ | Preprocessing failed.
+Traceback (most recent call last):
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\gui.py", line 723, in worker
+    fit_normalize(
+    ~~~~~~~~~~~~~^
+        input_csv=self.dataset_path.get(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+        ),
+        ^^
+    )
+    ^
+TypeError: fit_normalize() got an unexpected keyword argument 'outInitialRes_json'. Did you mean 'outInitalRes_json'?
+2026-10-10 18:51:00,813 | ERROR | __main__ | Feature selection failed.
+Traceback (most recent call last):
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\gui.py", line 819, in worker
+    select_features(
+    ~~~~~~~~~~~~~~~^
+        normalized_csv=str(
+        ^^^^^^^^^^^^^^^^^^^
+    ...<29 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 295, in select_features
+    _validate_inputs(
+    ~~~~~~~~~~~~~~~~^
+        normalized_csv=normalized_csv,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        alpha_computations=alpha_computations,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 44, in _validate_inputs
+    raise FileNotFoundError(f"Normalized dataset not found: {normalized_csv}")
+FileNotFoundError: Normalized dataset not found: outputs\preprocessing\normalized.csv
+2026-10-10 18:51:03,545 | ERROR | __main__ | Training failed.
+Traceback (most recent call last):
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\gui.py", line 928, in worker
+    train(
+    ~~~~~^
+        classifier=self.classifier.get(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<12 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\model.py", line 621, in train
+    df = _load_dataset(reducedTrain_csv)
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\model.py", line 149, in _load_dataset
+    path = _validate_csv_path(csv_path)
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\model.py", line 118, in _validate_csv_path
+    raise FileNotFoundError(
+        f"CSV file does not exist: {path}"
+    )
+FileNotFoundError: CSV file does not exist: outputs\feature_selection\training_reduced.csv
+2026-10-10 18:51:05,842 | ERROR | __main__ | Prediction failed.
+Traceback (most recent call last):
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\gui.py", line 1015, in worker
+    predict(
+    ~~~~~~~^
+        reduced_Test_csv=(
+        ^^^^^^^^^^^^^^^^^^
+    ...<11 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\model.py", line 770, in predict
+    df = _load_dataset(reduced_Test_csv)
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\model.py", line 149, in _load_dataset
+    path = _validate_csv_path(csv_path)
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\model.py", line 122, in _validate_csv_path
+    raise FileNotFoundError(
+        f"CSV path is not a file: {path}"
+    )
+FileNotFoundError: CSV path is not a file: .
+2026-10-10 18:55:05,852 | INFO | __main__ | Dataset preview loaded.
+2026-10-10 18:55:12,180 | INFO | __main__ | Preprocessing completed.
+2026-10-10 18:55:17,478 | INFO | __main__ | Feature selection completed.
+2026-10-10 18:55:24,565 | INFO | __main__ | Training completed.
+2026-10-10 18:55:27,180 | INFO | __main__ | Training completed.
+2026-10-10 18:55:29,172 | INFO | __main__ | Training completed.
+2026-10-10 18:55:33,572 | INFO | __main__ | Prediction completed.
+2026-10-10 18:56:05,270 | INFO | __main__ | Feature selection completed.
+2026-10-10 18:56:09,865 | INFO | __main__ | Feature selection completed.
+2026-10-10 18:56:15,288 | INFO | __main__ | Feature selection completed.
+2026-10-10 18:56:26,635 | INFO | __main__ | Dataset preview loaded.
+2026-10-10 18:56:37,666 | INFO | __main__ | Preprocessing completed.
+2026-10-10 18:56:39,869 | ERROR | __main__ | Feature selection failed.
+Traceback (most recent call last):
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\gui.py", line 819, in worker
+    select_features(
+    ~~~~~~~~~~~~~~~^
+        normalized_csv=str(
+        ^^^^^^^^^^^^^^^^^^^
+    ...<29 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 330, in select_features
+    result, history = _alpha_search(
+                      ~~~~~~~~~~~~~^
+        feature_target_corr=feature_target_corr,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        alpha_computations=alpha_computations,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 213, in _alpha_search
+    vector, cost = _solve_qubo(q, seed)
+                   ~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 174, in _solve_qubo
+    [int(best[i]) for i in range(len(best))],
+         ~~~~^^^
+KeyError: 46
+2026-10-10 18:57:08,700 | INFO | __main__ | Dataset preview loaded.
+2026-10-10 18:57:19,022 | INFO | __main__ | Preprocessing completed.
+2026-10-10 18:57:22,194 | ERROR | __main__ | Feature selection failed.
+Traceback (most recent call last):
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\gui.py", line 819, in worker
+    select_features(
+    ~~~~~~~~~~~~~~~^
+        normalized_csv=str(
+        ^^^^^^^^^^^^^^^^^^^
+    ...<29 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 330, in select_features
+    result, history = _alpha_search(
+                      ~~~~~~~~~~~~~^
+        feature_target_corr=feature_target_corr,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        alpha_computations=alpha_computations,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 213, in _alpha_search
+    vector, cost = _solve_qubo(q, seed)
+                   ~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 174, in _solve_qubo
+    [int(best[i]) for i in range(len(best))],
+         ~~~~^^^
+KeyError: 46
+2026-10-10 19:00:40,536 | INFO | __main__ | Dataset preview loaded.
+2026-10-10 19:00:46,310 | INFO | __main__ | Preprocessing completed.
+2026-10-10 19:00:49,282 | ERROR | __main__ | Feature selection failed.
+Traceback (most recent call last):
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\gui.py", line 819, in worker
+    select_features(
+    ~~~~~~~~~~~~~~~^
+        normalized_csv=str(
+        ^^^^^^^^^^^^^^^^^^^
+    ...<29 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 330, in select_features
+    result, history = _alpha_search(
+                      ~~~~~~~~~~~~~^
+        feature_target_corr=feature_target_corr,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        alpha_computations=alpha_computations,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 213, in _alpha_search
+    vector, cost = _solve_qubo(q, seed)
+                   ~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 178, in _solve_qubo
+    cost = _compute_cost(q, vector)
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 156, in _compute_cost
+    return float(vector.T @ q @ vector)
+                 ~~~~~~~~~^~~
+ValueError: matmul: Input operand 1 has a mismatch in its core dimension 0, with gufunc signature (n?,k),(k,m?)->(n?,m?) (size 100 is different from 99)
+2026-10-10 19:06:19,533 | INFO | __main__ | Dataset preview loaded.
+2026-10-10 19:06:23,961 | INFO | __main__ | Preprocessing completed.
+2026-10-10 19:06:26,301 | INFO | __main__ | Training completed.
+2026-10-10 19:06:33,359 | ERROR | __main__ | Feature selection failed.
+Traceback (most recent call last):
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\gui.py", line 819, in worker
+    select_features(
+    ~~~~~~~~~~~~~~~^
+        normalized_csv=str(
+        ^^^^^^^^^^^^^^^^^^^
+    ...<29 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 330, in select_features
+    result, history = _alpha_search(
+                      ~~~~~~~~~~~~~^
+        feature_target_corr=feature_target_corr,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        alpha_computations=alpha_computations,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 213, in _alpha_search
+    vector, cost = _solve_qubo(q, seed)
+                   ~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 178, in _solve_qubo
+    cost = _compute_cost(q, vector)
+  File "C:\Users\nicol\OneDrive\Desktop\progetto isw\isw-qubo-classification-G44\src\qubo_project\feature_selection.py", line 156, in _compute_cost
+    return float(vector.T @ q @ vector)
+                 ~~~~~~~~~^~~
+ValueError: matmul: Input operand 1 has a mismatch in its core dimension 0, with gufunc signature (n?,k),(k,m?)->(n?,m?) (size 100 is different from 99)
+2026-10-10 19:08:12,653 | INFO | __main__ | Dataset preview loaded.
+2026-10-10 19:08:18,177 | INFO | __main__ | Preprocessing completed.
+2026-10-10 19:08:19,930 | INFO | __main__ | Feature selection completed.
+2026-10-10 19:08:21,512 | INFO | __main__ | Feature selection completed.
+2026-10-10 19:08:23,373 | INFO | __main__ | Training completed.
+2026-10-10 19:08:25,198 | INFO | __main__ | Prediction completed.
+2026-10-10 19:08:38,787 | INFO | __main__ | Dataset preview loaded.
+2026-10-10 19:08:44,493 | INFO | __main__ | Preprocessing completed.
+2026-10-10 19:08:55,760 | INFO | __main__ | Feature selection completed.
+2026-10-10 19:09:04,843 | INFO | __main__ | Training completed.
+2026-10-10 19:09:08,764 | INFO | __main__ | Prediction completed.
