@@ -1,24 +1,36 @@
 {
-  "accuracy": 0.6666666666666666,
+  "accuracy": 0.9885,
   "class_0": {
-    "f1": 0.75,
-    "precision": 0.75,
-    "recall": 0.75
+    "f1": 0.9941490714830832,
+    "precision": 0.9900354669819287,
+    "recall": 0.9982970027247956,
+    "support": 5872
   },
   "class_1": {
-    "f1": 0.5,
-    "precision": 0.5,
-    "recall": 0.5
+    "f1": 0.6666666666666666,
+    "precision": 0.8734177215189873,
+    "recall": 0.5390625,
+    "support": 128
   },
-  "confusion_matrix": [
-    [
-      3,
+  "classifier": "random_forest",
+  "confusion_matrix": {
+    "labels": [
+      0,
       1
     ],
-    [
-      1,
-      1
+    "matrix": [
+      [
+        5862,
+        10
+      ],
+      [
+        59,
+        69
+      ]
     ]
-  ],
-  "roc_auc": 0.4375
+  },
+  "n_samples": 6000,
+  "roc_auc": 0.9561258674642371,
+  "target_1_count": 128,
+  "target_1_percentage": 2.1333333333333333
 }

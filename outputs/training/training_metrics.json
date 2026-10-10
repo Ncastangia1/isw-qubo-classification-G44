@@ -1,12 +1,16 @@
 {
-  "accuracy": 0.9285714285714286,
+  "accuracy": 1.0,
   "classifier": "random_forest",
-  "n_features": 1,
-  "n_samples": 14,
+  "model_path": "outputs\\training\\model.joblib",
+  "n_features": 20,
+  "n_samples": 14000,
   "seed": 42,
+  "target_1_percentage": 1.4571428571428573,
+  "target_column": "target",
   "target_distribution": {
-    "0": 10,
-    "1": 4
+    "0": 13796,
+    "1": 204
   },
-  "training_time_seconds": 0.078733
+  "training_dataset": "outputs\\feature_selection\\training_reduced.csv",
+  "training_time": 0.147782
 }
