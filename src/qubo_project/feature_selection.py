@@ -243,15 +243,23 @@ def _alpha_search(
             return best_result, history
 
         if selected > target_k:
-            high = alpha
-        else:
             low = alpha
+        else:
+            high = alpha
 
         alpha = (low + high) / 2.0
 
-    LOGGER.warning("Alpha search did not converge. Returning best solution.")
+    LOGGER.warning("Alpha search did not converge within the allowed tolerance.")
 
     assert best_result is not None
+    if best_distance > allowance:
+        raise RuntimeError(
+            "Feature selection did not reach the target count: "
+            f"target_k={target_k}, allowance={allowance}, "
+            f"best_count={best_result['selected']}, "
+            f"computations={len(history)}."
+        )
+
     return best_result, history
 
 
@@ -381,7 +389,7 @@ def select_features(
         "selected_feature_names": selected_feature_names,
         "algorithm": "simulated_annealing",
         "seed": seed,
-        "alpha_computations": int(result["iterations"]),
+        "alpha_computations": len(history),
         "percTest": percTest,
         "training_dataset_size": int(len(train_df)),
         "test_dataset_size": int(len(test_df)),

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.qubo_project import feature_selection as feature_selection_module
 from src.qubo_project.feature_selection import select_features
 
 REQUIRED_JSON_KEYS = {
@@ -190,6 +191,54 @@ def test_selected_feature_names_match_selected_vector(run_selection):
     assert ones_count == n_selected
 
 
+def test_alpha_search_increases_alpha_when_selecting_too_many(monkeypatch):
+    def solve_qubo(q, seed):
+        selected_count = q.shape[0] if q[0, 0] < 0.75 else 3
+        vector = np.zeros(q.shape[0], dtype=int)
+        vector[:selected_count] = 1
+        return vector, float(vector.T @ q @ vector)
+
+    monkeypatch.setattr(
+        feature_selection_module,
+        "_solve_qubo",
+        solve_qubo,
+    )
+
+    result, history = feature_selection_module._alpha_search(
+        feature_target_corr=np.ones(6),
+        feature_feature_corr=np.zeros((6, 6)),
+        target_k=3,
+        allowance=0,
+        seed=42,
+        alpha_computations=4,
+    )
+
+    assert [entry["alpha"] for entry in history] == [0.5, 0.75]
+    assert result["selected"] == 3
+
+
+def test_alpha_search_fails_when_target_count_is_unreachable(monkeypatch):
+    def solve_qubo(q, seed):
+        vector = np.ones(q.shape[0], dtype=int)
+        return vector, float(vector.T @ q @ vector)
+
+    monkeypatch.setattr(
+        feature_selection_module,
+        "_solve_qubo",
+        solve_qubo,
+    )
+
+    with pytest.raises(RuntimeError, match="did not reach the target count"):
+        feature_selection_module._alpha_search(
+            feature_target_corr=np.ones(6),
+            feature_feature_corr=np.zeros((6, 6)),
+            target_k=3,
+            allowance=0,
+            seed=42,
+            alpha_computations=4,
+        )
+
+
 def test_target_column_preserved_in_reduced_datasets(run_selection):
     for csv_file in (
         run_selection["train_csv"],
@@ -235,11 +284,12 @@ def test_output_feature_count_respects_target_ratio(run_selection):
     allowance = stats["allowance"]
     selected = stats["n_selected"]
 
-    assert abs(selected - target_k) <= allowance or selected >= 0
+    assert abs(selected - target_k) <= allowance
 
 
 def test_optimization_history_csv_created_correctly(run_selection):
     df = pd.read_csv(run_selection["optim_csv"])
+    stats = run_selection["stats"]
     expected_columns = {
         "alpha",
         "optimization_time",
@@ -250,6 +300,7 @@ def test_optimization_history_csv_created_correctly(run_selection):
     assert expected_columns.issubset(df.columns)
     assert len(df) >= 1
     assert pd.api.types.is_numeric_dtype(df["alpha"])
+    assert stats["alpha_computations"] == len(df)
 
 
 def test_alpha_values_within_valid_range(run_selection):
