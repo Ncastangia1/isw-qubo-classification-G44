@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.qubo_project import feature_selection as feature_selection_module
-from src.qubo_project.feature_selection import select_features
+from qubo_project import feature_selection as feature_selection_module
+from qubo_project.feature_selection import select_features
 
 REQUIRED_JSON_KEYS = {
     "n_features",
@@ -28,6 +28,7 @@ REQUIRED_JSON_KEYS = {
     "q_matrix_creation_time",
     "mean_optimization_time",
     "std_dev_optimization_time",
+    "selection_converged",
 }
 
 
@@ -191,7 +192,7 @@ def test_selected_feature_names_match_selected_vector(run_selection):
     assert ones_count == n_selected
 
 
-def test_qubo_matrix_encodes_relevance_redundancy_and_cardinality():
+def test_qubo_matrix_has_expected_signs_at_alpha_endpoints():
     feature_target_corr = np.array([0.2, 0.4, 0.6])
     feature_feature_corr = np.array(
         [
@@ -200,46 +201,75 @@ def test_qubo_matrix_encodes_relevance_redundancy_and_cardinality():
             [0.5, 0.7, 1.0],
         ]
     )
-    target_k = 2
-    alpha = 0.4
-    objective_scale = 3 * 4 / 2 + 1
-
-    q = feature_selection_module._build_qubo_matrix(
-        alpha,
+    q_at_zero = feature_selection_module._build_qubo_matrix(
+        0.0,
         feature_target_corr,
         feature_feature_corr,
-        target_k,
+    )
+    q_at_one = feature_selection_module._build_qubo_matrix(
+        1.0,
+        feature_target_corr,
+        feature_feature_corr,
     )
 
-    for vector in (
-        np.array([0, 0, 0]),
-        np.array([1, 0, 0]),
-        np.array([1, 1, 0]),
-        np.array([1, 1, 1]),
-    ):
-        relevance = -np.dot(feature_target_corr, vector)
-        redundancy = sum(
-            feature_feature_corr[i, j] * vector[i] * vector[j]
-            for i in range(3)
-            for j in range(i + 1, 3)
-        )
-        expected_cost = (
-            (relevance + redundancy) / objective_scale
-            + alpha * (
-                (vector.sum() - target_k) ** 2
-                - target_k**2
-            )
-        )
-        assert feature_selection_module._compute_cost(q, vector) == pytest.approx(
-            expected_cost
-        )
+    np.testing.assert_array_equal(np.diag(q_at_zero), np.zeros(3))
+    np.testing.assert_array_equal(np.diag(q_at_one), -feature_target_corr)
+    expected_at_zero = feature_feature_corr - np.diag(
+        np.diag(feature_feature_corr)
+    )
+    np.testing.assert_array_equal(q_at_zero, expected_at_zero)
+    np.testing.assert_array_equal(
+        q_at_one - np.diag(np.diag(q_at_one)),
+        np.zeros((3, 3)),
+    )
 
 
-def test_alpha_search_increases_alpha_when_selecting_too_many(monkeypatch):
+def test_qubo_dictionary_and_cost_use_each_pair_once():
+    q = feature_selection_module._build_qubo_matrix(
+        0.5,
+        np.array([0.4, 0.8]),
+        np.array([[1.0, 0.6], [0.6, 1.0]]),
+    )
+    vector = np.array([1, 1])
+
+    assert feature_selection_module._qubo_to_dict(q) == {
+        (0, 0): -0.2,
+        (0, 1): 0.3,
+        (1, 1): -0.4,
+    }
+    assert feature_selection_module._compute_cost(q, vector) == pytest.approx(-0.3)
+
+
+def test_alpha_search_increases_alpha_when_selecting_too_few(monkeypatch):
     def solve_qubo(q, seed):
-        selected_count = q.shape[0] if q[0, 0] > -2.0 else 3
+        alpha = -q[0, 0]
+        selected_count = 2 if alpha < 0.75 else 3
         vector = np.zeros(q.shape[0], dtype=int)
         vector[:selected_count] = 1
+        return vector, feature_selection_module._compute_cost(q, vector)
+
+    monkeypatch.setattr(
+        feature_selection_module,
+        "_solve_qubo",
+        solve_qubo,
+    )
+
+    result, history = feature_selection_module._alpha_search(
+        feature_target_corr=np.ones(6),
+        feature_feature_corr=np.zeros((6, 6)),
+        target_k=3,
+        allowance=0,
+        seed=42,
+        alpha_computations=4,
+    )
+
+    assert [entry["alpha"] for entry in history] == [0.5, 0.75]
+    assert result["selected"] == 3
+
+
+def test_alpha_search_returns_best_result_when_tolerance_is_unreachable(monkeypatch):
+    def solve_qubo(q, seed):
+        vector = np.ones(q.shape[0], dtype=int)
         return vector, float(vector.T @ q @ vector)
 
     monkeypatch.setattr(
@@ -257,30 +287,81 @@ def test_alpha_search_increases_alpha_when_selecting_too_many(monkeypatch):
         alpha_computations=4,
     )
 
-    assert [entry["alpha"] for entry in history] == [0.25, 0.5]
-    assert result["selected"] == 3
+    assert result["selected"] == 6
+    assert len(history) == 4
 
 
-def test_alpha_search_fails_when_target_count_is_unreachable(monkeypatch):
-    def solve_qubo(q, seed):
-        vector = np.ones(q.shape[0], dtype=int)
-        return vector, float(vector.T @ q @ vector)
+def test_feature_correlations_use_training_rows_only(
+    dataset_a,
+    tmp_path,
+    monkeypatch,
+):
+    dataset_path, original = dataset_a
+    split_index = round(len(original) * 0.7)
+    observed = {}
+
+    def capture_target_correlations(features, target):
+        observed["feature_rows"] = len(features)
+        observed["target"] = target.copy()
+        return np.zeros(features.shape[1])
+
+    def capture_feature_correlations(features):
+        observed["correlation_rows"] = len(features)
+        return np.zeros((features.shape[1], features.shape[1]))
+
+    def fixed_alpha_search(**kwargs):
+        vector = np.array([1, 0, 0, 0, 0, 0])
+        return (
+            {
+                "alpha": 0.5,
+                "vector": vector,
+                "selected": 1,
+                "cost": 0.0,
+                "iterations": 1,
+            },
+            [
+                {
+                    "alpha": 0.5,
+                    "optimization_time": 0.01,
+                    "q_matrix_creation_time": 0.001,
+                    "n_selected_features": 1,
+                    "cost_value": 0.0,
+                }
+            ],
+        )
 
     monkeypatch.setattr(
         feature_selection_module,
-        "_solve_qubo",
-        solve_qubo,
+        "_compute_feature_target_correlations",
+        capture_target_correlations,
+    )
+    monkeypatch.setattr(
+        feature_selection_module,
+        "_compute_feature_feature_correlations",
+        capture_feature_correlations,
+    )
+    monkeypatch.setattr(
+        feature_selection_module,
+        "_alpha_search",
+        fixed_alpha_search,
     )
 
-    with pytest.raises(RuntimeError, match="did not reach the target count"):
-        feature_selection_module._alpha_search(
-            feature_target_corr=np.ones(6),
-            feature_feature_corr=np.zeros((6, 6)),
-            target_k=3,
-            allowance=0,
-            seed=42,
-            alpha_computations=4,
-        )
+    select_features(
+        normalized_csv=str(dataset_path),
+        reducedTrain_csv=str(tmp_path / "train.csv"),
+        reducedTest_csv=str(tmp_path / "test.csv"),
+        output_ottim_csv=str(tmp_path / "optimizations.csv"),
+        output_json=str(tmp_path / "stats.json"),
+        target_column="target",
+        percTest=0.30,
+    )
+
+    assert observed["feature_rows"] == split_index
+    assert observed["correlation_rows"] == split_index
+    pd.testing.assert_series_equal(
+        observed["target"].reset_index(drop=True),
+        original["target"].iloc[:split_index].reset_index(drop=True),
+    )
 
 
 def test_target_column_preserved_in_reduced_datasets(run_selection):
@@ -328,7 +409,9 @@ def test_output_feature_count_respects_target_ratio(run_selection):
     allowance = stats["allowance"]
     selected = stats["n_selected"]
 
-    assert abs(selected - target_k) <= allowance
+    assert stats["selection_converged"] is (
+        abs(selected - target_k) <= allowance
+    )
 
 
 def test_optimization_history_csv_created_correctly(run_selection):
@@ -345,6 +428,9 @@ def test_optimization_history_csv_created_correctly(run_selection):
     assert len(df) >= 1
     assert pd.api.types.is_numeric_dtype(df["alpha"])
     assert stats["alpha_computations"] == len(df)
+    assert stats["q_matrix_creation_time"] == pytest.approx(
+        df["q_matrix_creation_time"].sum()
+    )
 
 
 def test_alpha_values_within_valid_range(run_selection):

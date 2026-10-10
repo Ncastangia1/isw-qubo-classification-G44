@@ -732,6 +732,7 @@ class QuboClassificationGUI:
                     minPercValid=float(
                         self.min_perc_valid.get()
                     ),
+                    percTest=float(self.perc_test.get()),
                 )
 
                 self.root.after(

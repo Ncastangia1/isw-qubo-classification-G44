@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from src.qubo_project.preprocessing import fit_normalize
+from qubo_project.preprocessing import fit_normalize
 
 SAMPLE_DATASET = Path("data/sample_test_dataset.csv")
 TARGET_COLUMN = "target"
@@ -171,6 +171,35 @@ def test_constant_column_is_handled_correctly(tmp_path):
     output_df = pd.read_csv(out_csv)
     assert "constant_feature" in output_df.columns
     assert set(output_df["constant_feature"].unique()) == {0}
+
+
+def test_partial_missing_values_are_imputed_from_training_median(tmp_path):
+    df = pd.DataFrame(
+        {
+            "feature": [1.0, np.nan, 3.0, 100.0, 200.0],
+            "target": [0, 1, 0, 1, 0],
+        }
+    )
+    csv_path = tmp_path / "dataset.csv"
+    output_path = tmp_path / "normalized.csv"
+    df.to_csv(csv_path, index=False)
+
+    fit_normalize(
+        input_csv=str(csv_path),
+        target_column="target",
+        normalized_csv=str(output_path),
+        outInitalRes_json=str(tmp_path / "stats.json"),
+        minPercValid=0.5,
+        percTest=0.4,
+    )
+
+    normalized = pd.read_csv(output_path)
+    assert np.isfinite(normalized["feature"]).all()
+    assert normalized.loc[1, "feature"] == pytest.approx(0.0)
+    expected_holdout_value = (200.0 - 2.0) / np.std([1.0, 2.0, 3.0])
+    assert normalized.loc[4, "feature"] == pytest.approx(
+        expected_holdout_value
+    )
 
 def test_duplicate_columns_raise_error(tmp_path):
     csv_content = "dup,dup,target\n1,2,0\n3,4,1\n"

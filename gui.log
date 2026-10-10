@@ -229,3 +229,13 @@ ValueError: matmul: Input operand 1 has a mismatch in its core dimension 0, with
 2026-10-10 19:08:55,760 | INFO | __main__ | Feature selection completed.
 2026-10-10 19:09:04,843 | INFO | __main__ | Training completed.
 2026-10-10 19:09:08,764 | INFO | __main__ | Prediction completed.
+2026-10-10 20:05:06,017 | INFO | __main__ | Dataset preview loaded.
+2026-10-10 20:05:07,804 | INFO | __main__ | Preprocessing completed.
+2026-10-10 20:05:09,397 | INFO | __main__ | Feature selection completed.
+2026-10-10 20:05:11,833 | INFO | __main__ | Training completed.
+2026-10-10 20:05:13,378 | INFO | __main__ | Prediction completed.
+2026-10-10 20:05:34,492 | INFO | __main__ | Dataset preview loaded.
+2026-10-10 20:05:39,304 | INFO | __main__ | Preprocessing completed.
+2026-10-10 20:05:41,938 | INFO | __main__ | Feature selection completed.
+2026-10-10 20:05:46,279 | INFO | __main__ | Training completed.
+2026-10-10 20:05:48,018 | INFO | __main__ | Prediction completed.

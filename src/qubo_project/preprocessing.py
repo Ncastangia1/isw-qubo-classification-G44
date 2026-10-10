@@ -200,16 +200,20 @@ def _select_valid_features(
     return features_df.loc[:, kept_columns], dropped_columns
 
 
-def _normalize_features(features_df: pd.DataFrame) -> pd.DataFrame:
+def _normalize_features(
+    features_df: pd.DataFrame,
+    training_rows: int,
+) -> pd.DataFrame:
     """
-    Normalize features using z-score standardization.
+    Impute from training medians and apply training-fitted z-score scaling.
 
-    Constant columns are transformed into all-zero columns.
+    Missing-only medians default to zero, and training-constant columns are
+    transformed into all-zero columns.
     """
-    if features_df.isna().any().any():
-        raise ValueError(
-            "NaN values remain in retained features after filtering."
-        )
+    training_features = features_df.iloc[:training_rows]
+    medians = training_features.median().fillna(0.0)
+    imputed_features = features_df.fillna(medians)
+    imputed_training_features = imputed_features.iloc[:training_rows]
 
     result = pd.DataFrame(
         index=features_df.index,
@@ -221,7 +225,7 @@ def _normalize_features(features_df: pd.DataFrame) -> pd.DataFrame:
     normal_columns: list[str] = []
 
     for column in features_df.columns:
-        if features_df[column].nunique(dropna=False) <= 1:
+        if imputed_training_features[column].nunique(dropna=False) <= 1:
             constant_columns.append(column)
         else:
             normal_columns.append(column)
@@ -229,8 +233,9 @@ def _normalize_features(features_df: pd.DataFrame) -> pd.DataFrame:
     if normal_columns:
         scaler = StandardScaler()
 
-        result.loc[:, normal_columns] = scaler.fit_transform(
-            features_df[normal_columns]
+        scaler.fit(imputed_training_features[normal_columns])
+        result.loc[:, normal_columns] = scaler.transform(
+            imputed_features[normal_columns]
         )
 
     for column in constant_columns:
@@ -312,6 +317,7 @@ def fit_normalize(
     normalized_csv: str,
     outInitalRes_json: str,
     minPercValid: float = 0.05,
+    percTest: float = 0.30,
 ):
     """
     Load, validate, filter and normalize a dataset.
@@ -329,6 +335,9 @@ def fit_normalize(
     minPercValid : float, default=0.05
         Minimum ratio of valid values required for a feature
         to survive filtering.
+    percTest : float, default=0.30
+        Fraction of trailing rows reserved for testing. Imputation and
+        normalization are fitted only on the preceding training rows.
 
     Returns
     -------
@@ -346,6 +355,8 @@ def fit_normalize(
         raise ValueError(
             "minPercValid must satisfy 0 <= minPercValid <= 1."
         )
+    if not (0.0 < percTest < 1.0):
+        raise ValueError("percTest must satisfy 0 < percTest < 1.")
 
     start_input = time.perf_counter()
 
@@ -368,15 +379,22 @@ def fit_normalize(
     feature_columns = [c for c in df.columns if c != target_column]
 
     n_input_features = len(feature_columns)
+    training_rows = round(len(df) * (1.0 - percTest))
+    if training_rows < 1 or training_rows >= len(df):
+        raise ValueError("Training and test partitions must both be non-empty.")
 
     features_df = df[feature_columns]
+    training_features_df = features_df.iloc[:training_rows]
 
     filtered_features_df, dropped_features = _select_valid_features(
-        features_df,
+        training_features_df,
         minPercValid=minPercValid,
     )
 
-    normalized_features_df = _normalize_features(filtered_features_df)
+    normalized_features_df = _normalize_features(
+        features_df.loc[:, filtered_features_df.columns],
+        training_rows=training_rows,
+    )
 
     output_df = normalized_features_df.copy()
     output_df[target_column] = target_series
@@ -440,6 +458,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0.05,
         help="Minimum valid ratio threshold.",
     )
+    parser.add_argument(
+        "--perc-test",
+        type=float,
+        default=0.30,
+        help="Fraction of rows reserved for the final test set.",
+    )
 
     return parser
 
@@ -458,6 +482,7 @@ def main() -> int:
             normalized_csv=args.out_data,
             outInitalRes_json=args.out_json,
             minPercValid=args.min_perc_valid,
+            percTest=args.perc_test,
         )
 
         return 0

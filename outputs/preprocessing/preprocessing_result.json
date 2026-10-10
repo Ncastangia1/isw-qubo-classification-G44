@@ -1,0 +1,8 @@
+{
+  "n_input_features": 6,
+  "n_kept_features": 6,
+  "dataset_size": 20,
+  "dataset_input_time": 0.000969,
+  "dataset_processing_time": 0.014812,
+  "dropped_feature_names": []
+}

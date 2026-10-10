@@ -122,25 +122,15 @@ def _build_qubo_matrix(
     alpha: float,
     feature_target_corr: np.ndarray,
     feature_feature_corr: np.ndarray,
-    target_k: int,
 ) -> np.ndarray:
     n_features = len(feature_target_corr)
-    objective_scale = n_features * (n_features + 1) / 2 + 1
-
     q = np.zeros((n_features, n_features), dtype=float)
 
-    np.fill_diagonal(
-        q,
-        -feature_target_corr / objective_scale
-        + alpha * (1 - 2 * target_k),
-    )
+    np.fill_diagonal(q, -alpha * feature_target_corr)
 
     for i in range(n_features):
         for j in range(i + 1, n_features):
-            value = (
-                feature_feature_corr[i, j] / (2 * objective_scale)
-                + alpha
-            )
+            value = (1.0 - alpha) * feature_feature_corr[i, j]
             q[i, j] = value
             q[j, i] = value
 
@@ -153,7 +143,7 @@ def _qubo_to_dict(q: np.ndarray) -> dict[tuple[int, int], float]:
     rows, cols = q.shape
 
     for i in range(rows):
-        for j in range(cols):
+        for j in range(i, cols):
             value = float(q[i, j])
             if value != 0.0:
                 qubo[(i, j)] = value
@@ -162,7 +152,7 @@ def _qubo_to_dict(q: np.ndarray) -> dict[tuple[int, int], float]:
 
 
 def _compute_cost(q: np.ndarray, vector: np.ndarray) -> float:
-    return float(vector.T @ q @ vector)
+    return float(np.sum(np.triu(q) * np.outer(vector, vector)))
 
 
 def _solve_qubo(
@@ -204,18 +194,20 @@ def _alpha_search(
     best_result: dict[str, Any] | None = None
     best_distance = float("inf")
 
+    low = 0.0
+    high = 1.0
+
     for iteration in range(alpha_computations):
-        alpha = (iteration + 1) / alpha_computations
+        alpha = 0.5 if iteration == 0 else (low + high) / 2.0
         q_start = time.perf_counter()
 
         q = _build_qubo_matrix(
             alpha,
             feature_target_corr,
             feature_feature_corr,
-            target_k,
         )
 
-        _ = time.perf_counter() - q_start
+        q_matrix_creation_time = time.perf_counter() - q_start
 
         opt_start = time.perf_counter()
 
@@ -229,6 +221,7 @@ def _alpha_search(
             {
                 "alpha": alpha,
                 "optimization_time": opt_time,
+                "q_matrix_creation_time": q_matrix_creation_time,
                 "n_selected_features": selected,
                 "cost_value": cost,
             }
@@ -249,34 +242,28 @@ def _alpha_search(
         if target_k - allowance <= selected <= target_k + allowance:
             return best_result, history
 
+        if selected > target_k:
+            high = alpha
+        else:
+            low = alpha
+
     LOGGER.warning("Alpha search did not converge within the allowed tolerance.")
 
     assert best_result is not None
-    if best_distance > allowance:
-        raise RuntimeError(
-            "Feature selection did not reach the target count: "
-            f"target_k={target_k}, allowance={allowance}, "
-            f"best_count={best_result['selected']}, "
-            f"computations={len(history)}."
-        )
-
     return best_result, history
 
 
 def _create_reduced_datasets(
-    dataset: pd.DataFrame,
+    training_dataset: pd.DataFrame,
+    test_dataset: pd.DataFrame,
     selected_features: list[str],
     target_column: str,
-    perc_test: float,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    reduced = dataset[selected_features + [target_column]]
-
-    m = round(len(reduced) * (1.0 - perc_test))
-
-    train_df = reduced.iloc[:m].copy()
-    test_df = reduced.iloc[m:].copy()
-
-    return train_df, test_df
+    columns = selected_features + [target_column]
+    return (
+        training_dataset[columns].copy(),
+        test_dataset[columns].copy(),
+    )
 
 
 def _ensure_parent(path: str) -> None:
@@ -307,12 +294,16 @@ def select_features(
         alpha_computations=alpha_computations,
     )
 
-    dataset, features, target = _load_dataset(
+    dataset, _, _ = _load_dataset(
         normalized_csv,
         target_column,
     )
 
-    q_time_start = time.perf_counter()
+    split_index = round(len(dataset) * (1.0 - percTest))
+    training_dataset = dataset.iloc[:split_index].copy()
+    test_dataset = dataset.iloc[split_index:].copy()
+    features = training_dataset.drop(columns=[target_column])
+    target = training_dataset[target_column]
 
     feature_target_corr = _compute_feature_target_correlations(
         features,
@@ -322,8 +313,6 @@ def select_features(
     feature_feature_corr = _compute_feature_feature_correlations(
         features,
     )
-
-    q_matrix_creation_time = time.perf_counter() - q_time_start
 
     LOGGER.info("Spearman correlations computed.")
 
@@ -351,10 +340,10 @@ def select_features(
     ]
 
     train_df, test_df = _create_reduced_datasets(
-        dataset=dataset,
+        training_dataset=training_dataset,
+        test_dataset=test_dataset,
         selected_features=selected_feature_names,
         target_column=target_column,
-        perc_test=percTest,
     )
 
     for output_path in (
@@ -390,10 +379,15 @@ def select_features(
         "algorithm": "simulated_annealing",
         "seed": seed,
         "alpha_computations": len(history),
+        "selection_converged": (
+            abs(int(result["selected"]) - target_k) <= allowance
+        ),
         "percTest": percTest,
         "training_dataset_size": int(len(train_df)),
         "test_dataset_size": int(len(test_df)),
-        "q_matrix_creation_time": float(q_matrix_creation_time),
+        "q_matrix_creation_time": float(
+            history_df["q_matrix_creation_time"].sum()
+        ),
         "mean_optimization_time": float(np.mean(optimization_times)),
         "std_dev_optimization_time": float(
             np.std(optimization_times)

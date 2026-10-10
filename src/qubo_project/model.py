@@ -365,16 +365,24 @@ def _build_training_metrics(
     seed: int,
     X: pd.DataFrame,
     y: pd.Series,
-    training_time_seconds: float,
+    training_time: float,
+    training_dataset: str,
+    target_column: str,
+    model_path: str,
 ) -> dict[str, Any]:
+    target_1_count = int((y == 1).sum())
     return {
         "classifier": classifier_name,
         "seed": seed,
+        "training_dataset": training_dataset,
+        "target_column": target_column,
+        "model_path": model_path,
         "n_samples": int(len(X)),
         "n_features": int(X.shape[1]),
         "target_distribution": _get_target_distribution(y),
-        "training_time_seconds": round(
-            float(training_time_seconds),
+        "target_1_percentage": float(target_1_count / len(y) * 100),
+        "training_time": round(
+            float(training_time),
             6,
         ),
     }
@@ -410,7 +418,7 @@ def _build_class_metrics(
     y_true: pd.Series,
     y_pred: np.ndarray,
 ) -> dict[str, Any]:
-    precision, recall, f1, _ = (
+    precision, recall, f1, support = (
         precision_recall_fscore_support(
             y_true,
             y_pred,
@@ -423,11 +431,13 @@ def _build_class_metrics(
             "precision": float(precision[0]),
             "recall": float(recall[0]),
             "f1": float(f1[0]),
+            "support": int(support[0]),
         },
         "class_1": {
             "precision": float(precision[1]),
             "recall": float(recall[1]),
             "f1": float(f1[1]),
+            "support": int(support[1]),
         },
     }
 
@@ -436,8 +446,14 @@ def _build_prediction_metrics(
     y_true: pd.Series,
     y_pred: np.ndarray,
     y_score: np.ndarray,
+    classifier_name: str,
 ) -> dict[str, Any]:
+    target_1_count = int((y_true == 1).sum())
     metrics = {
+        "classifier": classifier_name,
+        "n_samples": int(len(y_true)),
+        "target_1_count": target_1_count,
+        "target_1_percentage": float(target_1_count / len(y_true) * 100),
         "accuracy": float(
             accuracy_score(
                 y_true,
@@ -448,11 +464,14 @@ def _build_prediction_metrics(
             y_true,
             y_score,
         ),
-        "confusion_matrix": confusion_matrix(
-            y_true,
-            y_pred,
-            labels=[0, 1],
-        ).tolist(),
+        "confusion_matrix": {
+            "labels": [0, 1],
+            "matrix": confusion_matrix(
+                y_true,
+                y_pred,
+                labels=[0, 1],
+            ).tolist(),
+        },
     }
     metrics.update(
         _build_class_metrics(
@@ -703,7 +722,10 @@ def train(
             seed=seed,
             X=X,
             y=y,
-            training_time_seconds=training_time_seconds,
+            training_time=training_time_seconds,
+            training_dataset=str(reducedTrain_csv),
+            target_column=target_column,
+            model_path=str(model_path),
         )
 
         training_metrics["accuracy"] = training_accuracy
@@ -836,6 +858,7 @@ def predict(
             y_true=y_true,
             y_pred=y_pred,
             y_score=y_score,
+            classifier_name=classifier_name,
         )
 
         predictions_df = pd.DataFrame(

@@ -347,17 +347,24 @@ def test_build_training_metrics(
         seed=42,
         X=X,
         y=y,
-        training_time_seconds=1.23456789,
+        training_time=1.23456789,
+        training_dataset="train.csv",
+        target_column="target",
+        model_path="model.joblib",
     )
     assert metrics["classifier"] == "random_forest"
     assert metrics["seed"] == 42
+    assert metrics["training_dataset"] == "train.csv"
+    assert metrics["target_column"] == "target"
+    assert metrics["model_path"] == "model.joblib"
     assert metrics["n_samples"] == len(X)
     assert metrics["n_features"] == X.shape[1]
     assert metrics["target_distribution"] == {
         "0": 3,
         "1": 3,
     }
-    assert metrics["training_time_seconds"] == round(
+    assert metrics["target_1_percentage"] == 50.0
+    assert metrics["training_time"] == round(
         1.23456789,
         6,
     )
@@ -393,6 +400,8 @@ def test_build_class_metrics_complete_binary_case() -> None:
     assert "class_1" in metrics
     assert metrics["class_0"]["f1"] == pytest.approx(1.0)
     assert metrics["class_1"]["f1"] == pytest.approx(1.0)
+    assert metrics["class_0"]["support"] == 2
+    assert metrics["class_1"]["support"] == 2
 
 
 def test_build_class_metrics_missing_positive_class() -> None:
@@ -417,14 +426,21 @@ def test_build_prediction_metrics() -> None:
         y_true=pd.Series([0, 0, 1, 1]),
         y_pred=np.array([0, 0, 1, 1]),
         y_score=np.array([0.1, 0.2, 0.8, 0.9]),
+        classifier_name="random_forest",
     )
     assert "accuracy" in metrics
     assert "roc_auc" in metrics
     assert "class_0" in metrics
     assert "class_1" in metrics
     assert "confusion_matrix" in metrics
-    assert len(metrics["confusion_matrix"]) == 2
-    assert len(metrics["confusion_matrix"][0]) == 2
+    assert metrics["classifier"] == "random_forest"
+    assert metrics["n_samples"] == 4
+    assert metrics["target_1_count"] == 2
+    assert metrics["target_1_percentage"] == 50.0
+    assert metrics["confusion_matrix"] == {
+        "labels": [0, 1],
+        "matrix": [[2, 0], [0, 2]],
+    }
 
 
 def test_write_json(
@@ -588,6 +604,11 @@ def test_train_random_forest_end_to_end(
     assert metrics["n_samples"] == len(valid_training_df)
     assert metrics["n_features"] == 3
     assert "accuracy" in metrics
+    assert metrics["target_1_percentage"] == 50.0
+    assert metrics["training_dataset"] == str(train_csv)
+    assert metrics["target_column"] == "target"
+    assert metrics["model_path"] == str(model_path)
+    assert "training_time" in metrics
 
 
 def test_train_logistic_regression_end_to_end(
@@ -742,6 +763,12 @@ def test_predict_end_to_end(
     assert "class_0" in stats
     assert "class_1" in stats
     assert "confusion_matrix" in stats
+    assert stats["confusion_matrix"]["labels"] == [0, 1]
+    assert stats["class_1"]["support"] == 3
+    assert stats["classifier"] == "random_forest"
+    assert stats["n_samples"] == len(valid_prediction_df)
+    assert stats["target_1_count"] == 3
+    assert stats["target_1_percentage"] == 50.0
 
 
 def test_predict_missing_model(

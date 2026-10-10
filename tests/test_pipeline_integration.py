@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -301,7 +302,11 @@ def test_classification_json_validation(
     assert "roc_auc" in payload
     assert "class_0" in payload
     assert "class_1" in payload
-    assert "confusion_matrix" in payload
+    assert payload["confusion_matrix"]["labels"] == [0, 1]
+    assert len(payload["confusion_matrix"]["matrix"]) == 2
+    assert payload["n_samples"] == len(
+        pd.read_csv(outputs["test_reduced_csv"])
+    )
 
 
 def test_pipeline_reproducibility(
@@ -352,7 +357,15 @@ def test_pipeline_reproducibility(
 def test_cli_pipeline_execution(
     sample_dataset: pd.DataFrame,
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    source_path = str(Path(__file__).resolve().parents[1] / "src")
+    monkeypatch.setenv(
+        "PYTHONPATH",
+        os.pathsep.join(
+            filter(None, (source_path, os.environ.get("PYTHONPATH", "")))
+        ),
+    )
     input_csv = tmp_path / "input.csv"
     sample_dataset.to_csv(
         input_csv,
