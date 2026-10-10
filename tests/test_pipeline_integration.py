@@ -31,6 +31,8 @@ def _run_pipeline(
     base_dir: Path,
     dataset: pd.DataFrame,
     seed: int = 42,
+    perc_selected: float = 1.0,
+    allowance: int = 0,
 ) -> dict[str, Path]:
     
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -79,6 +81,9 @@ def _run_pipeline(
         output_ottim_csv=str(optimizations_csv),
         output_json=str(feature_selection_json),
         target_column="target",
+        percTest=0.30,
+        percSelected=perc_selected,
+        allowance=allowance,
         seed=seed,
     )
     train(
@@ -140,6 +145,27 @@ def test_complete_pipeline_end_to_end(
     ]
     for key in expected_files:
         assert outputs[key].exists()
+
+
+def test_sample_dataset_pipeline_end_to_end(tmp_path: Path) -> None:
+    sample_path = Path("data/sample_test_dataset.csv")
+    if not sample_path.exists():
+        pytest.skip("data/sample_test_dataset.csv is not available")
+
+    outputs = _run_pipeline(
+        tmp_path,
+        pd.read_csv(sample_path),
+    )
+
+    predictions = pd.read_csv(outputs["predictions_csv"])
+    test_rows = pd.read_csv(outputs["test_reduced_csv"])
+    assert len(predictions) == len(test_rows)
+    assert list(predictions.columns) == [
+        "row_n",
+        "target",
+        "prediction",
+        "score",
+    ]
 
 
 def test_pipeline_data_compatibility(
@@ -436,6 +462,10 @@ def test_cli_pipeline_execution(
             "target",
             "--seed",
             "42",
+            "--perc-selected",
+            "1.0",
+            "--allowance",
+            "0",
         ],
         check=True,
     )

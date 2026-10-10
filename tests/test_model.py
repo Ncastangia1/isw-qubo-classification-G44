@@ -196,6 +196,28 @@ def test_validate_training_dataset_single_class_target() -> None:
         )
 
 
+def test_validate_training_dataset_non_binary_target() -> None:
+    df = pd.DataFrame(
+        {
+            "feature": [1, 2, 3],
+            "target": [0, 1, 2],
+        }
+    )
+    with pytest.raises(ValueError, match="binary classes"):
+        _validate_training_dataset(df, "target")
+
+
+def test_validate_training_dataset_missing_target_value() -> None:
+    df = pd.DataFrame(
+        {
+            "feature": [1, 2, 3],
+            "target": [0, 1, np.nan],
+        }
+    )
+    with pytest.raises(ValueError, match="cannot contain missing"):
+        _validate_training_dataset(df, "target")
+
+
 def test_validate_training_dataset_duplicate_columns() -> None:
     df = pd.DataFrame(
         [[1, 2, 3, 0], [4, 5, 6, 1]],
@@ -218,6 +240,15 @@ def test_validate_prediction_dataset_success(
 ) -> None:
     _validate_prediction_dataset(
         valid_prediction_df,
+        "target",
+    )
+
+
+def test_validate_prediction_dataset_accepts_one_binary_class(
+    valid_prediction_df: pd.DataFrame,
+) -> None:
+    _validate_prediction_dataset(
+        valid_prediction_df.assign(target=0),
         "target",
     )
 
@@ -749,13 +780,24 @@ def test_predict_end_to_end(
     assert predictions_path.exists()
     assert stats_path.exists()
     predictions_df = pd.read_csv(predictions_path)
-    assert {
+    assert list(predictions_df.columns) == [
         "row_n",
         "target",
         "prediction",
         "score",
-    }.issubset(predictions_df.columns)
+    ]
+    assert len(predictions_df) == len(valid_prediction_df)
+    assert predictions_df["row_n"].tolist() == list(
+        range(len(valid_prediction_df))
+    )
+    assert set(predictions_df["prediction"]).issubset({0, 1})
     assert predictions_df["score"].between(0, 1).all()
+    artifact = joblib.load(model_path)
+    positive_column = np.flatnonzero(artifact["estimator"].classes_ == 1)[0]
+    expected_scores = artifact["estimator"].predict_proba(
+        valid_prediction_df.drop(columns=["target"])
+    )[:, positive_column]
+    np.testing.assert_allclose(predictions_df["score"], expected_scores)
     stats = json.loads(
         stats_path.read_text(encoding="utf-8")
     )

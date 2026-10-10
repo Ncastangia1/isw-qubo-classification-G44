@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from itertools import product
 from pathlib import Path
 
 import numpy as np
@@ -225,19 +226,88 @@ def test_qubo_matrix_has_expected_signs_at_alpha_endpoints():
 
 
 def test_qubo_dictionary_and_cost_use_each_pair_once():
+    feature_target_corr = np.array([0.4, -0.8])
+    feature_feature_corr = np.array([[1.0, -0.6], [-0.6, 1.0]])
     q = feature_selection_module._build_qubo_matrix(
         0.5,
-        np.array([0.4, 0.8]),
-        np.array([[1.0, 0.6], [0.6, 1.0]]),
+        feature_target_corr,
+        feature_feature_corr,
     )
-    vector = np.array([1, 1])
+    qubo = feature_selection_module._qubo_to_dict(q)
 
-    assert feature_selection_module._qubo_to_dict(q) == {
+    assert qubo == {
         (0, 0): -0.2,
-        (0, 1): 0.3,
+        (0, 1): 0.6,
         (1, 1): -0.4,
     }
-    assert feature_selection_module._compute_cost(q, vector) == pytest.approx(-0.3)
+    for bits in product((0, 1), repeat=2):
+        vector = np.asarray(bits)
+        expected = (
+            -0.5 * np.dot(np.abs(feature_target_corr), vector)
+            + 0.5
+            * sum(
+                abs(feature_feature_corr[row, column])
+                * vector[row]
+                * vector[column]
+                for row in range(2)
+                for column in range(2)
+                if row != column
+            )
+        )
+        sampler_cost = sum(
+            value * vector[row] * vector[column]
+            for (row, column), value in qubo.items()
+        )
+        assert feature_selection_module._compute_cost(q, vector) == pytest.approx(
+            expected
+        )
+        assert sampler_cost == pytest.approx(expected)
+
+
+def test_alpha_endpoints_have_deterministic_solutions(monkeypatch):
+    def unexpected_sampler_call(q, seed):
+        raise AssertionError("endpoint solutions must be deterministic")
+
+    monkeypatch.setattr(
+        feature_selection_module,
+        "_solve_qubo",
+        unexpected_sampler_call,
+    )
+
+    result, history = feature_selection_module._alpha_search(
+        feature_target_corr=np.zeros(3),
+        feature_feature_corr=np.zeros((3, 3)),
+        target_k=3,
+        allowance=0,
+        seed=42,
+        alpha_computations=2,
+    )
+
+    np.testing.assert_array_equal(result["vector"], np.ones(3, dtype=int))
+    assert [entry["alpha"] for entry in history] == [0.0, 1.0]
+
+
+def test_alpha_zero_endpoint_is_empty_even_when_tied(monkeypatch):
+    def unexpected_sampler_call(q, seed):
+        raise AssertionError("endpoint solutions must be deterministic")
+
+    monkeypatch.setattr(
+        feature_selection_module,
+        "_solve_qubo",
+        unexpected_sampler_call,
+    )
+
+    result, history = feature_selection_module._alpha_search(
+        feature_target_corr=np.zeros(3),
+        feature_feature_corr=np.zeros((3, 3)),
+        target_k=3,
+        allowance=3,
+        seed=42,
+        alpha_computations=1,
+    )
+
+    np.testing.assert_array_equal(result["vector"], np.zeros(3, dtype=int))
+    assert history[0]["alpha"] == 0.0
 
 
 def test_alpha_search_increases_alpha_when_selecting_too_few(monkeypatch):
@@ -263,11 +333,11 @@ def test_alpha_search_increases_alpha_when_selecting_too_few(monkeypatch):
         alpha_computations=4,
     )
 
-    assert [entry["alpha"] for entry in history] == [0.5, 0.75]
+    assert [entry["alpha"] for entry in history] == [0.0, 1.0, 0.5, 0.75]
     assert result["selected"] == 3
 
 
-def test_alpha_search_returns_best_result_when_tolerance_is_unreachable(monkeypatch):
+def test_alpha_search_reports_unreachable_tolerance(monkeypatch):
     def solve_qubo(q, seed):
         vector = np.ones(q.shape[0], dtype=int)
         return vector, float(vector.T @ q @ vector)
@@ -278,17 +348,15 @@ def test_alpha_search_returns_best_result_when_tolerance_is_unreachable(monkeypa
         solve_qubo,
     )
 
-    result, history = feature_selection_module._alpha_search(
-        feature_target_corr=np.ones(6),
-        feature_feature_corr=np.zeros((6, 6)),
-        target_k=3,
-        allowance=0,
-        seed=42,
-        alpha_computations=4,
-    )
-
-    assert result["selected"] == 6
-    assert len(history) == 4
+    with pytest.raises(RuntimeError, match="after 4 alpha computations"):
+        feature_selection_module._alpha_search(
+            feature_target_corr=np.ones(6),
+            feature_feature_corr=np.zeros((6, 6)),
+            target_k=3,
+            allowance=0,
+            seed=42,
+            alpha_computations=4,
+        )
 
 
 def test_feature_correlations_use_training_rows_only(
@@ -298,15 +366,19 @@ def test_feature_correlations_use_training_rows_only(
 ):
     dataset_path, original = dataset_a
     split_index = round(len(original) * 0.7)
-    observed = {}
+    observed = []
 
     def capture_target_correlations(features, target):
-        observed["feature_rows"] = len(features)
-        observed["target"] = target.copy()
+        observed.append(
+            {
+                "features": features.copy(),
+                "target": target.copy(),
+            }
+        )
         return np.zeros(features.shape[1])
 
     def capture_feature_correlations(features):
-        observed["correlation_rows"] = len(features)
+        observed[-1]["correlation_rows"] = len(features)
         return np.zeros((features.shape[1], features.shape[1]))
 
     def fixed_alpha_search(**kwargs):
@@ -346,22 +418,38 @@ def test_feature_correlations_use_training_rows_only(
         fixed_alpha_search,
     )
 
-    select_features(
-        normalized_csv=str(dataset_path),
-        reducedTrain_csv=str(tmp_path / "train.csv"),
-        reducedTest_csv=str(tmp_path / "test.csv"),
-        output_ottim_csv=str(tmp_path / "optimizations.csv"),
-        output_json=str(tmp_path / "stats.json"),
-        target_column="target",
-        percTest=0.30,
-    )
+    altered = original.copy()
+    altered.loc[split_index:, "target"] = 1 - altered.loc[
+        split_index:, "target"
+    ]
+    altered_path = tmp_path / "test_targets_changed.csv"
+    altered.to_csv(altered_path, index=False)
 
-    assert observed["feature_rows"] == split_index
-    assert observed["correlation_rows"] == split_index
-    pd.testing.assert_series_equal(
-        observed["target"].reset_index(drop=True),
-        original["target"].iloc[:split_index].reset_index(drop=True),
-    )
+    selected_feature_names = []
+    for index, input_path in enumerate((dataset_path, altered_path)):
+        select_features(
+            normalized_csv=str(input_path),
+            reducedTrain_csv=str(tmp_path / f"train_{index}.csv"),
+            reducedTest_csv=str(tmp_path / f"test_{index}.csv"),
+            output_ottim_csv=str(tmp_path / f"optimizations_{index}.csv"),
+            output_json=str(tmp_path / f"stats_{index}.json"),
+            target_column="target",
+            percTest=0.30,
+        )
+        stats = json.loads(
+            (tmp_path / f"stats_{index}.json").read_text(encoding="utf-8")
+        )
+        selected_feature_names.append(stats["selected_feature_names"])
+
+    assert selected_feature_names[0] == selected_feature_names[1]
+    assert len(observed) == 2
+    for captured in observed:
+        assert len(captured["features"]) == split_index
+        assert captured["correlation_rows"] == split_index
+        pd.testing.assert_series_equal(
+            captured["target"].reset_index(drop=True),
+            original["target"].iloc[:split_index].reset_index(drop=True),
+        )
 
 
 def test_target_column_preserved_in_reduced_datasets(run_selection):
@@ -417,20 +505,19 @@ def test_output_feature_count_respects_target_ratio(run_selection):
 def test_optimization_history_csv_created_correctly(run_selection):
     df = pd.read_csv(run_selection["optim_csv"])
     stats = run_selection["stats"]
-    expected_columns = {
+    expected_columns = [
         "alpha",
         "optimization_time",
         "n_selected_features",
         "cost_value",
-    }
+    ]
 
-    assert expected_columns.issubset(df.columns)
+    assert list(df.columns) == expected_columns
     assert len(df) >= 1
     assert pd.api.types.is_numeric_dtype(df["alpha"])
+    assert df["alpha"].is_monotonic_increasing
     assert stats["alpha_computations"] == len(df)
-    assert stats["q_matrix_creation_time"] == pytest.approx(
-        df["q_matrix_creation_time"].sum()
-    )
+    assert stats["q_matrix_creation_time"] >= 0.0
 
 
 def test_alpha_values_within_valid_range(run_selection):

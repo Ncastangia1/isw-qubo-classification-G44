@@ -1,5 +1,8 @@
 import json
+import os
 from pathlib import Path
+import time
+import tracemalloc
 import numpy as np
 import pandas as pd
 import pytest
@@ -199,6 +202,82 @@ def test_partial_missing_values_are_imputed_from_training_median(tmp_path):
     expected_holdout_value = (200.0 - 2.0) / np.std([1.0, 2.0, 3.0])
     assert normalized.loc[4, "feature"] == pytest.approx(
         expected_holdout_value
+    )
+    assert normalized.loc[:2, "feature"].mean() == pytest.approx(0.0)
+    assert normalized.loc[:2, "feature"].std(ddof=0) == pytest.approx(1.0)
+
+
+def test_all_zero_feature_is_dropped_but_boundary_feature_is_kept(tmp_path):
+    df = pd.DataFrame(
+        {
+            "all_zero": [0] * 20,
+            "boundary": [1] + [0] * 19,
+            "normal": list(range(1, 21)),
+            "target": [0, 1] * 10,
+        }
+    )
+    csv_path = tmp_path / "dataset.csv"
+    output_path = tmp_path / "normalized.csv"
+    stats_path = tmp_path / "stats.json"
+    df.to_csv(csv_path, index=False)
+
+    fit_normalize(
+        input_csv=str(csv_path),
+        target_column="target",
+        normalized_csv=str(output_path),
+        outInitalRes_json=str(stats_path),
+        minPercValid=0.05,
+        percTest=0.25,
+    )
+
+    normalized = pd.read_csv(output_path)
+    stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    assert "all_zero" not in normalized.columns
+    assert "boundary" in normalized.columns
+    assert stats["dropped_feature_names"] == ["all_zero"]
+    assert np.isfinite(normalized.drop(columns="target").to_numpy()).all()
+
+
+@pytest.mark.performance
+@pytest.mark.skipif(
+    os.environ.get("RUN_PERFORMANCE_TESTS") != "1",
+    reason="Set RUN_PERFORMANCE_TESTS=1 to run the 1.5M-row benchmark.",
+)
+def test_preprocessing_large_dataset_performance(tmp_path):
+    row_count = 1_500_001
+    values = np.arange(row_count, dtype=np.float64)
+    dataset = pd.DataFrame(
+        {
+            "feature_a": values % 97 + 1,
+            "feature_b": values % 131 + 1,
+            "feature_c": values % 53 + 1,
+            "target": values.astype(np.int8) % 2,
+        }
+    )
+    input_path = tmp_path / "large.csv"
+    output_path = tmp_path / "normalized.csv"
+    stats_path = tmp_path / "stats.json"
+    dataset.to_csv(input_path, index=False)
+    del dataset, values
+
+    tracemalloc.start()
+    start = time.perf_counter()
+    fit_normalize(
+        input_csv=str(input_path),
+        target_column="target",
+        normalized_csv=str(output_path),
+        outInitalRes_json=str(stats_path),
+    )
+    elapsed = time.perf_counter() - start
+    _, peak_memory = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    assert stats["dataset_size"] == row_count
+    assert output_path.stat().st_size > 0
+    print(
+        f"rows={row_count}, elapsed_seconds={elapsed:.3f}, "
+        f"tracemalloc_peak_mib={peak_memory / (1024 ** 2):.1f}"
     )
 
 def test_duplicate_columns_raise_error(tmp_path):

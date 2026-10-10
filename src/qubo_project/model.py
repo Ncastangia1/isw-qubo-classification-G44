@@ -234,10 +234,12 @@ def _validate_training_dataset(
             "Training dataset contains no feature columns."
         )
     target = df[target_column]
+    if target.isna().any():
+        raise ValueError("Training target cannot contain missing values.")
     unique_classes = target.dropna().unique()
-    if len(unique_classes) < 2:
+    if len(unique_classes) < 2 or not set(unique_classes).issubset({0, 1}):
         raise ValueError(
-            "Training target must contain at least two classes."
+            "Training target must contain both binary classes 0 and 1."
         )
 
 
@@ -276,6 +278,11 @@ def _validate_prediction_dataset(
     if not feature_columns:
         raise ValueError(
             "Prediction dataset contains no feature columns."
+        )
+    target = df[target_column]
+    if target.isna().any() or not target.isin([0, 1]).all():
+        raise ValueError(
+            "Prediction target must contain only binary classes 0 and 1."
         )
 
 
@@ -816,7 +823,14 @@ def predict(
 
         try:
             if hasattr(estimator, "predict_proba"):
-                y_score = estimator.predict_proba(X)[:, 1]
+                positive_column = np.flatnonzero(
+                    np.asarray(estimator.classes_) == 1
+                )
+                if len(positive_column) != 1:
+                    raise ValueError(
+                        "Trained classifier does not expose class 1."
+                    )
+                y_score = estimator.predict_proba(X)[:, positive_column[0]]
             elif hasattr(estimator, "decision_function"):
                 raw_scores = estimator.decision_function(X)
 

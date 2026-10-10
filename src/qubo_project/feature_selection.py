@@ -126,11 +126,11 @@ def _build_qubo_matrix(
     n_features = len(feature_target_corr)
     q = np.zeros((n_features, n_features), dtype=float)
 
-    np.fill_diagonal(q, -alpha * feature_target_corr)
+    np.fill_diagonal(q, -alpha * np.abs(feature_target_corr))
 
     for i in range(n_features):
         for j in range(i + 1, n_features):
-            value = (1.0 - alpha) * feature_feature_corr[i, j]
+            value = (1.0 - alpha) * abs(feature_feature_corr[i, j])
             q[i, j] = value
             q[j, i] = value
 
@@ -145,6 +145,8 @@ def _qubo_to_dict(q: np.ndarray) -> dict[tuple[int, int], float]:
     for i in range(rows):
         for j in range(i, cols):
             value = float(q[i, j])
+            if i != j:
+                value *= 2.0
             if value != 0.0:
                 qubo[(i, j)] = value
 
@@ -152,7 +154,7 @@ def _qubo_to_dict(q: np.ndarray) -> dict[tuple[int, int], float]:
 
 
 def _compute_cost(q: np.ndarray, vector: np.ndarray) -> float:
-    return float(np.sum(np.triu(q) * np.outer(vector, vector)))
+    return float(vector.T @ q @ vector)
 
 
 def _solve_qubo(
@@ -196,9 +198,18 @@ def _alpha_search(
 
     low = 0.0
     high = 1.0
+    endpoint_alphas = iter(
+        [0.0, 1.0] if alpha_computations > 1 else [0.0]
+    )
 
-    for iteration in range(alpha_computations):
-        alpha = 0.5 if iteration == 0 else (low + high) / 2.0
+    while len(history) < alpha_computations:
+        try:
+            alpha = next(endpoint_alphas)
+            is_endpoint = True
+        except StopIteration:
+            alpha = (low + high) / 2.0
+            is_endpoint = False
+
         q_start = time.perf_counter()
 
         q = _build_qubo_matrix(
@@ -210,9 +221,14 @@ def _alpha_search(
         q_matrix_creation_time = time.perf_counter() - q_start
 
         opt_start = time.perf_counter()
-
-        vector, cost = _solve_qubo(q, seed)
-
+        if alpha == 0.0:
+            vector = np.zeros(len(feature_target_corr), dtype=int)
+            cost = _compute_cost(q, vector)
+        elif alpha == 1.0:
+            vector = np.ones(len(feature_target_corr), dtype=int)
+            cost = _compute_cost(q, vector)
+        else:
+            vector, cost = _solve_qubo(q, seed)
         opt_time = time.perf_counter() - opt_start
 
         selected = int(vector.sum())
@@ -242,15 +258,21 @@ def _alpha_search(
         if target_k - allowance <= selected <= target_k + allowance:
             return best_result, history
 
-        if selected > target_k:
-            high = alpha
-        else:
-            low = alpha
+        if not is_endpoint:
+            if selected > target_k:
+                high = alpha
+            else:
+                low = alpha
 
     LOGGER.warning("Alpha search did not converge within the allowed tolerance.")
 
     assert best_result is not None
-    return best_result, history
+    raise RuntimeError(
+        "Feature selection did not find a solution within "
+        f"target_k={target_k} +/- {allowance}; "
+        f"best_count={best_result['selected']} after {len(history)} "
+        "alpha computations."
+    )
 
 
 def _create_reduced_datasets(
@@ -357,13 +379,10 @@ def select_features(
     train_df.to_csv(reducedTrain_csv, index=False)
     test_df.to_csv(reducedTest_csv, index=False)
 
-    history_df = (
-        pd.DataFrame(history)
-        .sort_values("alpha")
-        .reset_index(drop=True)
-    )
-
-    history_df.to_csv(output_ottim_csv, index=False)
+    history_df = pd.DataFrame(history).sort_values("alpha").reset_index(drop=True)
+    history_df[
+        ["alpha", "optimization_time", "n_selected_features", "cost_value"]
+    ].to_csv(output_ottim_csv, index=False)
 
     optimization_times = history_df["optimization_time"].to_numpy(dtype=float)
 
