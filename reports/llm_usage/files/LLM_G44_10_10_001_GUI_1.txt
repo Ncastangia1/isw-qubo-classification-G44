@@ -1,0 +1,708 @@
+Technical Design Document (TDD)
+src/qubo_project/gui.py
+1. Technology Evaluation
+Candidate Technologies
+Tkinter
+
+Advantages
+
+Included with standard Python distributions.
+No additional dependencies required.
+Works offline.
+Easy portability across Windows, Linux, and macOS.
+Aligns well with academic project distribution requirements.
+Simple deployment for professors evaluating the project.
+
+Disadvantages
+
+Older visual appearance.
+More manual work for modern layouts.
+Limited built-in visual components.
+Streamlit
+
+Advantages
+
+Extremely fast development.
+Modern web-based interface.
+Excellent support for displaying tables and metrics.
+
+Disadvantages
+
+Requires additional installation.
+Launches a local web server.
+More complex project execution workflow.
+Less suitable if evaluators expect a traditional desktop application.
+Gradio
+
+Advantages
+
+Very quick to develop.
+Good support for machine-learning workflows.
+Clean interface.
+
+Disadvantages
+
+Additional dependency.
+Primarily designed for ML demonstrations.
+Less appropriate for multi-step file processing pipelines.
+PyQt
+
+Advantages
+
+Professional appearance.
+Rich widget ecosystem.
+Excellent scalability.
+
+Disadvantages
+
+Large dependency.
+Significantly more implementation effort.
+Increased packaging complexity.
+Evaluation Summary
+Criterion	Tkinter	Streamlit	Gradio	PyQtInstallation	Excellent	Medium	Medium	Poor
+Dependencies	None	External	External	Large
+Portability	Excellent	Good	Good	Good
+Development Speed	Good	Excellent	Excellent	Medium
+Academic Evaluation	Excellent	Good	Good	Medium
+Reproducibility	Excellent	Good	Good	Good
+Recommended Technology
+Tkinter
+Justification
+
+Tkinter is the most appropriate choice because:
+
+It is included with Python.
+Requires no additional installation.
+Provides deterministic execution.
+Simplifies evaluation by professors.
+Fully satisfies project requirements.
+Reduces dependency-related risks.
+
+The GUI is an orchestration layer, not a visualization-heavy analytics platform. Therefore Tkinter provides sufficient functionality while minimizing complexity.
+
+2. Functional Requirements Mapping
+Dataset Selection
+User Inputs
+Input dataset path
+Target column
+Backend Call
+
+No backend call.
+
+Outputs
+Dataset path displayed
+Preview enabled
+Preprocessing
+User Inputs
+Target column
+minPercValid
+Backend Call
+Plain Text
+fit_normalize(...)
+Outputs
+
+Files:
+
+Plain Text
+normalized.csv
+preprocessing_result.json
+
+Displayed:
+
+Records processed
+Features processed
+Removed features
+Missing value summary
+Feature Selection
+User Inputs
+percSelected
+allowance
+percTest
+seed
+alphaComputations
+Backend Call
+Plain Text
+select_features(...)
+Outputs
+
+Files:
+
+Plain Text
+training_reduced.csv
+test_reduced.csv
+optimizations.csv
+feature_selection_result.json
+
+Displayed:
+
+Selected features
+Selected vector
+Alpha value
+Optimization statistics
+Training
+User Inputs
+Classifier
+
+Available options:
+
+Plain Text
+random_forest
+logistic_regression
+decision_tree
+seed
+Backend Call
+Plain Text
+train(...)
+Outputs
+
+Files:
+
+Plain Text
+model.joblib
+training_metrics.json
+
+Displayed:
+
+Accuracy
+Training samples
+Number of features
+Class distribution
+Prediction
+User Inputs
+Model file
+Test dataset
+Backend Call
+Plain Text
+predict(...)
+Outputs
+
+Files:
+
+Plain Text
+predictions.csv
+classification_stats.json
+
+Displayed:
+
+Accuracy
+ROC-AUC
+Precision
+Recall
+Confusion matrix
+3. Application Workflow
+Plain Text
+Dataset Selection
+↓
+Preprocessing
+↓
+Feature Selection
+↓
+Training
+↓
+Prediction
+↓
+Results Visualization
+Step 1
+
+Select CSV dataset.
+
+Store:
+
+Plain Text
+dataset_path
+target_column
+Step 2
+
+Run preprocessing.
+
+Generate normalized data.
+
+Enable next phase only after success.
+
+Step 3
+
+Run feature selection.
+
+Create reduced datasets.
+
+Store selected-feature metadata.
+
+Enable training phase.
+
+Step 4
+
+Train model.
+
+Generate:
+
+Plain Text
+model.joblib
+training_metrics.json
+ 
+
+Enable prediction phase.
+
+Step 5
+
+Run prediction.
+
+Generate final reports.
+
+Display evaluation metrics.
+
+Step 6
+
+Allow export and inspection of generated artifacts.
+
+4. Screen Design
+Single-Window Multi-Tab Architecture
+
+Recommended tabs:
+
+Plain Text
+Main Window
+│
+├── Dataset
+├── Preprocessing
+├── Feature Selection
+├── Training
+├── Prediction
+└── Results
+Dataset Tab
+Widgets
+File picker
+Dataset path textbox
+Target column entry
+Dataset preview table
+Buttons
+Plain Text
+Browse
+Load Dataset
+Preprocessing Tab
+Widgets
+minPercValid input
+Buttons
+Plain Text
+Run Preprocessing
+Output Area
+Execution log
+Summary panel
+Feature Selection Tab
+Widgets
+percSelected
+allowance
+percTest
+seed
+alphaComputations
+Buttons
+Plain Text
+Run Feature Selection
+Output Area
+Selected features
+Optimization summary
+Training Tab
+Widgets
+
+Classifier dropdown
+
+Plain Text
+Random Forest
+Logistic Regression
+Decision Tree
+
+Seed input.
+
+Buttons
+Plain Text
+Train Model
+Output Area
+Training metrics
+Prediction Tab
+Widgets
+Model path
+Test dataset path
+Buttons
+Plain Text
+Run Prediction
+Output Area
+Classification metrics
+Results Tab
+Widgets
+Result summary
+Artifact list
+Download controls
+5. Configuration Inputs
+Preprocessing
+Parameter	Validationtarget_column	Required
+minPercValid	0 < value ≤ 1
+Feature Selection
+Parameter	ValidationpercSelected	0 < value ≤ 1
+allowance	≥ 0
+percTest	0 < value < 1
+seed	integer
+alphaComputations	positive integer
+Training
+Parameter	Validationclassifier	Required
+seed	integer
+Prediction
+Parameter	Validationmodel_path	Existing file
+test_dataset	Existing file
+6. Output Visualization
+Preprocessing Summary
+
+Display:
+
+Input rows
+Valid rows
+Removed columns
+Missing data statistics
+
+Download:
+
+Plain Text
+normalized.csv
+preprocessing_result.json
+Feature Selection Summary
+
+Display:
+
+Selected features
+Selected vector
+Alpha
+
+Download:
+
+Plain Text
+training_reduced.csv
+test_reduced.csv
+optimizations.csv
+feature_selection_result.json
+Training Summary
+
+Display:
+
+Classifier
+Accuracy
+Training time
+Feature count
+
+Download:
+
+Plain Text
+model.joblib
+training_metrics.json
+Prediction Summary
+
+Display:
+
+Accuracy
+ROC-AUC
+Precision
+Recall
+F1
+
+Download:
+
+Plain Text
+predictions.csv
+classification_stats.json
+Confusion Matrix
+
+Displayed as:
+
+Plain Text
+Pred 0 Pred 1
+True 0
+True 1
+
+No custom plotting required.
+
+7. Error Handling Strategy
+Invalid CSV
+User Message
+Plain Text
+Unable to load CSV file.
+Logging
+
+ERROR
+
+Recovery
+
+Allow file re-selection.
+
+Missing Target
+User Message
+Plain Text
+Selected target column does not exist.
+Logging
+
+ERROR
+
+Recovery
+
+Prompt user to select another column.
+
+Preprocessing Failure
+User Message
+Plain Text
+Preprocessing failed.
+See details in log panel.
+Logging
+
+ERROR + stack trace
+
+Recovery
+
+Remain on preprocessing tab.
+
+Feature Selection Failure
+User Message
+Plain Text
+Feature selection failed.
+Logging
+
+ERROR
+
+Recovery
+
+Allow parameter correction.
+
+Training Failure
+User Message
+Plain Text
+Model training failed.
+Logging
+
+ERROR
+
+Recovery
+
+Allow re-execution.
+
+Prediction Failure
+User Message
+Plain Text
+Prediction failed.
+Logging
+
+ERROR
+
+Recovery
+
+Allow model/test dataset replacement.
+
+8. Long-Running Operations
+
+Operations:
+
+preprocessing
+feature selection
+training
+prediction
+
+especially:
+
+Plain Text
+feature selection
+training
+Recommendations
+
+Run backend operation inside worker thread.
+
+Main UI thread remains responsive.
+
+Progress Indicator
+
+Indeterminate progress bar.
+
+Example:
+
+Plain Text
+Running feature selection...
+Status Area
+
+Messages:
+
+Plain Text
+Ready
+Running preprocessing...
+Running feature selection...
+Training model...
+Generating predictions...
+Completed
+Failed
+Completion Notification
+
+Popup dialog:
+
+Plain Text
+Operation completed successfully.
+9. Backend Integration
+Design Principle
+
+GUI is an orchestration layer only.
+
+Business logic remains entirely in:
+
+Plain Text
+preprocessing.py
+feature_selection.py
+model.py
+Data Flow
+Plain Text
+Dataset
+↓
+fit_normalize()
+↓
+normalized.csv
+↓
+select_features()
+↓
+training_reduced.csv
+test_reduced.csv
+↓
+train()
+↓
+model.joblib
+↓
+predict()
+↓
+results
+Parameter Mapping
+
+GUI fields map directly to backend parameters.
+
+No transformations.
+
+No duplicated validations.
+
+Backend remains source of truth.
+
+Output Storage
+
+Recommended folder:
+
+Plain Text
+outputs/
+
+Structure:
+
+Plain Text
+outputs/
+│
+├── preprocessing/
+├── feature_selection/
+├── training/
+└── prediction/
+10. Testing Strategy
+GUI Smoke Tests
+
+Validate:
+
+application launches
+widgets visible
+tabs accessible
+Workflow Tests
+
+Validate:
+
+full pipeline execution
+output generation
+artifact visibility
+Error Tests
+
+Validate:
+
+invalid CSV
+missing target
+backend exception propagation
+invalid parameter inputs
+Manual Evaluation Checklist
+Load dataset.
+Run preprocessing.
+Run feature selection.
+Train model.
+Generate predictions.
+Inspect outputs.
+Export artifacts.
+11. Final GUI Blueprint
+Recommended Framework
+Plain Text
+Tkinter
+File Structure
+Plain Text
+src/
+└── qubo_project/
+├── preprocessing.py
+├── feature_selection.py
+├── model.py
+└── gui.py
+Page Structure
+Plain Text
+GUI
+│
+├── Dataset
+├── Preprocessing
+├── Feature Selection
+├── Training
+├── Prediction
+└── Results
+Widget Responsibilities
+Dataset Tab
+
+Dataset loading and validation.
+
+Preprocessing Tab
+
+Preprocessing execution.
+
+Feature Selection Tab
+
+Feature-selection configuration and execution.
+
+Training Tab
+
+Classifier selection and training.
+
+Prediction Tab
+
+Prediction generation.
+
+Results Tab
+
+Artifact review and export.
+
+Logging Strategy
+
+Three levels:
+
+Plain Text
+INFO
+WARNING
+ERROR
+
+Display recent log entries in a dedicated log panel.
+
+Persist logs to:
+
+Plain Text
+gui.log
+Backend Integration Strategy
+
+GUI never reimplements:
+
+Plain Text
+fit_normalize
+select_features
+train
+predict
+
+It only:
+
+Collects input parameters.
+Calls backend APIs.
+Displays results.
+Displays generated artifacts.
+Handles errors gracefully.
+
+This architecture minimizes duplication, maximizes maintainability, and aligns with both the project specification and the existing backend implementation.
