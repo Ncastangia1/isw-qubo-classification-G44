@@ -252,7 +252,7 @@ def _alpha_search(
                 "vector": vector,
                 "selected": selected,
                 "cost": cost,
-                "iterations": iteration + 1,
+                "iterations": len(history),
             }
 
         if target_k - allowance <= selected <= target_k + allowance:
