@@ -122,16 +122,25 @@ def _build_qubo_matrix(
     alpha: float,
     feature_target_corr: np.ndarray,
     feature_feature_corr: np.ndarray,
+    target_k: int,
 ) -> np.ndarray:
     n_features = len(feature_target_corr)
+    objective_scale = n_features * (n_features + 1) / 2 + 1
 
     q = np.zeros((n_features, n_features), dtype=float)
 
-    np.fill_diagonal(q, alpha * feature_target_corr)
+    np.fill_diagonal(
+        q,
+        -feature_target_corr / objective_scale
+        + alpha * (1 - 2 * target_k),
+    )
 
     for i in range(n_features):
         for j in range(i + 1, n_features):
-            value = -(1.0 - alpha) * feature_feature_corr[i, j]
+            value = (
+                feature_feature_corr[i, j] / (2 * objective_scale)
+                + alpha
+            )
             q[i, j] = value
             q[j, i] = value
 
@@ -190,22 +199,20 @@ def _alpha_search(
     seed: int,
     alpha_computations: int,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    low = 0.0
-    high = 1.0
-    alpha = 0.5
-
     history: list[dict[str, Any]] = []
 
     best_result: dict[str, Any] | None = None
     best_distance = float("inf")
 
     for iteration in range(alpha_computations):
+        alpha = (iteration + 1) / alpha_computations
         q_start = time.perf_counter()
 
         q = _build_qubo_matrix(
             alpha,
             feature_target_corr,
             feature_feature_corr,
+            target_k,
         )
 
         _ = time.perf_counter() - q_start
@@ -241,13 +248,6 @@ def _alpha_search(
 
         if target_k - allowance <= selected <= target_k + allowance:
             return best_result, history
-
-        if selected > target_k:
-            low = alpha
-        else:
-            high = alpha
-
-        alpha = (low + high) / 2.0
 
     LOGGER.warning("Alpha search did not converge within the allowed tolerance.")
 

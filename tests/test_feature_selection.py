@@ -191,9 +191,53 @@ def test_selected_feature_names_match_selected_vector(run_selection):
     assert ones_count == n_selected
 
 
+def test_qubo_matrix_encodes_relevance_redundancy_and_cardinality():
+    feature_target_corr = np.array([0.2, 0.4, 0.6])
+    feature_feature_corr = np.array(
+        [
+            [1.0, 0.3, 0.5],
+            [0.3, 1.0, 0.7],
+            [0.5, 0.7, 1.0],
+        ]
+    )
+    target_k = 2
+    alpha = 0.4
+    objective_scale = 3 * 4 / 2 + 1
+
+    q = feature_selection_module._build_qubo_matrix(
+        alpha,
+        feature_target_corr,
+        feature_feature_corr,
+        target_k,
+    )
+
+    for vector in (
+        np.array([0, 0, 0]),
+        np.array([1, 0, 0]),
+        np.array([1, 1, 0]),
+        np.array([1, 1, 1]),
+    ):
+        relevance = -np.dot(feature_target_corr, vector)
+        redundancy = sum(
+            feature_feature_corr[i, j] * vector[i] * vector[j]
+            for i in range(3)
+            for j in range(i + 1, 3)
+        )
+        expected_cost = (
+            (relevance + redundancy) / objective_scale
+            + alpha * (
+                (vector.sum() - target_k) ** 2
+                - target_k**2
+            )
+        )
+        assert feature_selection_module._compute_cost(q, vector) == pytest.approx(
+            expected_cost
+        )
+
+
 def test_alpha_search_increases_alpha_when_selecting_too_many(monkeypatch):
     def solve_qubo(q, seed):
-        selected_count = q.shape[0] if q[0, 0] < 0.75 else 3
+        selected_count = q.shape[0] if q[0, 0] > -2.0 else 3
         vector = np.zeros(q.shape[0], dtype=int)
         vector[:selected_count] = 1
         return vector, float(vector.T @ q @ vector)
@@ -213,7 +257,7 @@ def test_alpha_search_increases_alpha_when_selecting_too_many(monkeypatch):
         alpha_computations=4,
     )
 
-    assert [entry["alpha"] for entry in history] == [0.5, 0.75]
+    assert [entry["alpha"] for entry in history] == [0.25, 0.5]
     assert result["selected"] == 3
 
 
