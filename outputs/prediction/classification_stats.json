@@ -1,18 +1,18 @@
 {
-  "accuracy": 0.9885,
+  "accuracy": 0.6666666666666666,
   "class_0": {
-    "f1": 0.9941490714830832,
-    "precision": 0.9900354669819287,
-    "recall": 0.9982970027247956,
-    "support": 5872
+    "f1": 0.75,
+    "precision": 0.75,
+    "recall": 0.75,
+    "support": 4
   },
   "class_1": {
-    "f1": 0.6666666666666666,
-    "precision": 0.8734177215189873,
-    "recall": 0.5390625,
-    "support": 128
+    "f1": 0.5,
+    "precision": 0.5,
+    "recall": 0.5,
+    "support": 2
   },
-  "classifier": "random_forest",
+  "classifier": "decision_tree",
   "confusion_matrix": {
     "labels": [
       0,
@@ -20,17 +20,17 @@
     ],
     "matrix": [
       [
-        5862,
-        10
+        3,
+        1
       ],
       [
-        59,
-        69
+        1,
+        1
       ]
     ]
   },
-  "n_samples": 6000,
-  "roc_auc": 0.9561258674642371,
-  "target_1_count": 128,
-  "target_1_percentage": 2.1333333333333333
+  "n_samples": 6,
+  "roc_auc": 0.5625,
+  "target_1_count": 2,
+  "target_1_percentage": 33.33333333333333
 }

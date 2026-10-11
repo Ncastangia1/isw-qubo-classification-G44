@@ -254,3 +254,73 @@ ValueError: matmul: Input operand 1 has a mismatch in its core dimension 0, with
 2026-10-10 21:11:00,441 | INFO | __main__ | Feature selection completed.
 2026-10-10 21:11:01,784 | INFO | __main__ | Training completed.
 2026-10-10 21:11:03,589 | INFO | __main__ | Prediction completed.
+2026-10-11 16:04:34,611 | INFO | __main__ | Dataset preview loaded.
+2026-10-11 16:04:43,320 | INFO | __main__ | Preprocessing completed.
+2026-10-11 16:04:51,324 | INFO | __main__ | Feature selection completed.
+2026-10-11 16:04:56,161 | INFO | __main__ | Training completed.
+2026-10-11 16:05:01,740 | INFO | __main__ | Prediction completed.
+2026-10-11 16:05:17,558 | INFO | __main__ | Dataset preview loaded.
+2026-10-11 16:05:19,715 | INFO | __main__ | Preprocessing completed.
+2026-10-11 16:05:21,281 | INFO | __main__ | Feature selection completed.
+2026-10-11 16:05:22,726 | ERROR | __main__ | Training failed.
+Traceback (most recent call last):
+  File "D:\isw-qubo-classification-G44\src\qubo_project\gui.py", line 929, in worker
+    train(
+    ~~~~~^
+        classifier=self.classifier.get(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<12 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "D:\isw-qubo-classification-G44\src\qubo_project\model.py", line 655, in train
+    _validate_training_dataset(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        df=df,
+        ^^^^^^
+        target_column=target_column,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "D:\isw-qubo-classification-G44\src\qubo_project\model.py", line 233, in _validate_training_dataset
+    raise ValueError(
+        "Training dataset contains no feature columns."
+    )
+ValueError: Training dataset contains no feature columns.
+2026-10-11 16:17:55,099 | INFO | __main__ | Dataset preview loaded.
+2026-10-11 16:17:59,592 | INFO | __main__ | Preprocessing completed.
+2026-10-11 16:18:06,423 | INFO | __main__ | Feature selection completed.
+2026-10-11 16:18:16,705 | INFO | __main__ | Training completed.
+2026-10-11 16:18:19,743 | INFO | __main__ | Prediction completed.
+2026-10-11 16:18:26,728 | INFO | __main__ | Dataset preview loaded.
+2026-10-11 16:18:28,642 | INFO | __main__ | Preprocessing completed.
+2026-10-11 16:18:30,296 | INFO | __main__ | Feature selection completed.
+2026-10-11 16:18:34,657 | INFO | __main__ | Training completed.
+2026-10-11 16:18:36,991 | INFO | __main__ | Prediction completed.
+2026-10-11 16:20:57,568 | INFO | __main__ | Dataset preview loaded.
+2026-10-11 16:21:02,534 | INFO | __main__ | Preprocessing completed.
+2026-10-11 16:21:09,233 | INFO | __main__ | Feature selection completed.
+2026-10-11 16:21:12,451 | INFO | __main__ | Training completed.
+2026-10-11 16:21:15,311 | INFO | __main__ | Prediction completed.
+2026-10-11 16:21:21,173 | INFO | __main__ | Dataset preview loaded.
+2026-10-11 16:21:23,055 | INFO | __main__ | Preprocessing completed.
+2026-10-11 16:21:24,565 | INFO | __main__ | Feature selection completed.
+2026-10-11 16:21:27,895 | INFO | __main__ | Training completed.
+2026-10-11 16:21:30,127 | INFO | __main__ | Prediction completed.
+2026-10-11 16:21:40,019 | INFO | __main__ | Dataset preview loaded.
+2026-10-11 16:21:48,705 | INFO | __main__ | Preprocessing completed.
+2026-10-11 16:21:56,907 | INFO | __main__ | Feature selection completed.
+2026-10-11 16:22:00,610 | INFO | __main__ | Training completed.
+2026-10-11 16:22:02,521 | INFO | __main__ | Training completed.
+2026-10-11 16:22:04,908 | INFO | __main__ | Training completed.
+2026-10-11 16:22:07,092 | INFO | __main__ | Prediction completed.
+2026-10-11 16:22:12,492 | INFO | __main__ | Dataset preview loaded.
+2026-10-11 16:22:17,485 | INFO | __main__ | Dataset preview loaded.
+2026-10-11 16:22:19,780 | INFO | __main__ | Dataset preview loaded.
+2026-10-11 16:22:22,397 | INFO | __main__ | Preprocessing completed.
+2026-10-11 16:22:24,454 | INFO | __main__ | Feature selection completed.
+2026-10-11 16:22:26,723 | INFO | __main__ | Training completed.
+2026-10-11 16:22:28,244 | INFO | __main__ | Training completed.
+2026-10-11 16:22:29,727 | INFO | __main__ | Training completed.
+2026-10-11 16:22:31,190 | INFO | __main__ | Prediction completed.

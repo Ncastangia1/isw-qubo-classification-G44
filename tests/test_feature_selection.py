@@ -193,6 +193,17 @@ def test_selected_feature_names_match_selected_vector(run_selection):
     assert ones_count == n_selected
 
 
+def test_safe_abs_spearman_returns_zero_for_constant_inputs():
+    assert feature_selection_module._safe_abs_spearman(
+        pd.Series([1, 1, 1]),
+        pd.Series([0, 1, 0]),
+    ) == 0.0
+    assert feature_selection_module._safe_abs_spearman(
+        pd.Series([1, 2, 3]),
+        pd.Series([1, 1, 1]),
+    ) == 0.0
+
+
 def test_qubo_matrix_has_expected_signs_at_alpha_endpoints():
     feature_target_corr = np.array([0.2, 0.4, 0.6])
     feature_feature_corr = np.array(
@@ -287,7 +298,7 @@ def test_alpha_endpoints_have_deterministic_solutions(monkeypatch):
     assert [entry["alpha"] for entry in history] == [0.0, 1.0]
 
 
-def test_alpha_zero_endpoint_is_empty_even_when_tied(monkeypatch):
+def test_alpha_zero_endpoint_is_not_accepted_as_selection(monkeypatch):
     def unexpected_sampler_call(q, seed):
         raise AssertionError("endpoint solutions must be deterministic")
 
@@ -297,17 +308,38 @@ def test_alpha_zero_endpoint_is_empty_even_when_tied(monkeypatch):
         unexpected_sampler_call,
     )
 
+    with pytest.raises(RuntimeError, match="did not select any features"):
+        feature_selection_module._alpha_search(
+            feature_target_corr=np.zeros(3),
+            feature_feature_corr=np.zeros((3, 3)),
+            target_k=3,
+            allowance=3,
+            seed=42,
+            alpha_computations=1,
+        )
+
+
+def test_alpha_search_does_not_accept_empty_selection_within_allowance(
+    monkeypatch,
+):
+    def solve_qubo(q, seed):
+        vector = np.zeros(q.shape[0], dtype=int)
+        vector[0] = 1
+        return vector, feature_selection_module._compute_cost(q, vector)
+
+    monkeypatch.setattr(feature_selection_module, "_solve_qubo", solve_qubo)
+
     result, history = feature_selection_module._alpha_search(
-        feature_target_corr=np.zeros(3),
-        feature_feature_corr=np.zeros((3, 3)),
-        target_k=3,
-        allowance=3,
+        feature_target_corr=np.ones(6),
+        feature_feature_corr=np.zeros((6, 6)),
+        target_k=1,
+        allowance=1,
         seed=42,
-        alpha_computations=1,
+        alpha_computations=3,
     )
 
-    np.testing.assert_array_equal(result["vector"], np.zeros(3, dtype=int))
-    assert history[0]["alpha"] == 0.0
+    assert [entry["alpha"] for entry in history] == [0.0, 1.0, 0.5]
+    assert result["selected"] == 1
 
 
 def test_alpha_search_increases_alpha_when_selecting_too_few(monkeypatch):
@@ -678,6 +710,27 @@ def test_different_seed_still_produces_valid_solution(tmp_path, dataset_a):
     test_df = pd.read_csv(tmp_path / "test.csv")
     assert not train_df.empty
     assert not test_df.empty
+
+
+def test_perc_selected_rounding_never_targets_zero_features(
+    tmp_path,
+    dataset_c,
+):
+    dataset_path, _ = dataset_c
+    stats = select_features(
+        normalized_csv=str(dataset_path),
+        reducedTrain_csv=str(tmp_path / "train.csv"),
+        reducedTest_csv=str(tmp_path / "test.csv"),
+        output_ottim_csv=str(tmp_path / "optim.csv"),
+        output_json=str(tmp_path / "stats.json"),
+        target_column="target",
+        percSelected=0.01,
+        allowance=0,
+        seed=42,
+    )
+
+    assert stats["target_k"] == 1
+    assert stats["n_selected"] == 1
 
 
 def test_single_feature_dataset_handled_gracefully(tmp_path, dataset_c):

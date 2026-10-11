@@ -201,11 +201,11 @@ LLM_G03-06-13-003_readme_section.md
 
 Before submission, verify that:
 
-- [ ] Every relevant LLM interaction has been recorded.
-- [ ] Each interaction has a unique ID.
-- [ ] Date and time are present for every interaction.
-- [ ] The author is identified as either `couple` or one student matricola.
-- [ ] The full prompt is included.
-- [ ] The full LLM response is included or correctly referenced as a separate file.
-- [ ] Every downloaded/generated file has a unique name, is present in the repository and is correctly referenced in this log.
-- [ ] Problems, errors, and hallucinations have been reported honestly.
+- [-] Every relevant LLM interaction has been recorded.
+- [-] Each interaction has a unique ID.
+- [-] Date and time are present for every interaction.
+- [-] The author is identified as either `couple` or one student matricola.
+- [-] The full prompt is included.
+- [-] The full LLM response is included or correctly referenced as a separate file.
+- [-] Every downloaded/generated file has a unique name, is present in the repository and is correctly referenced in this log.
+- [-] Problems, errors, and hallucinations have been reported honestly.

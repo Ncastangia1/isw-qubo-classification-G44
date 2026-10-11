@@ -1,16 +1,16 @@
 {
-  "accuracy": 1.0,
-  "classifier": "random_forest",
+  "accuracy": 0.9285714285714286,
+  "classifier": "decision_tree",
   "model_path": "outputs\\training\\model.joblib",
-  "n_features": 20,
-  "n_samples": 14000,
+  "n_features": 1,
+  "n_samples": 14,
   "seed": 42,
-  "target_1_percentage": 1.4571428571428573,
+  "target_1_percentage": 28.57142857142857,
   "target_column": "target",
   "target_distribution": {
-    "0": 13796,
-    "1": 204
+    "0": 10,
+    "1": 4
   },
   "training_dataset": "outputs\\feature_selection\\training_reduced.csv",
-  "training_time": 0.147977
+  "training_time": 0.003294
 }

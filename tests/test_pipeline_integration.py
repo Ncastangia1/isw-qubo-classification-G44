@@ -155,10 +155,14 @@ def test_sample_dataset_pipeline_end_to_end(tmp_path: Path) -> None:
     outputs = _run_pipeline(
         tmp_path,
         pd.read_csv(sample_path),
+        perc_selected=0.20,
+        allowance=1,
     )
 
     predictions = pd.read_csv(outputs["predictions_csv"])
+    training = pd.read_csv(outputs["training_reduced_csv"])
     test_rows = pd.read_csv(outputs["test_reduced_csv"])
+    assert len(training.columns) > 1
     assert len(predictions) == len(test_rows)
     assert list(predictions.columns) == [
         "row_n",

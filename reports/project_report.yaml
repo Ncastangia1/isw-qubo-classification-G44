@@ -1,0 +1,193 @@
+# ============================================================
+# Template report progetto
+# Classificazione binaria con feature reduction QUBO
+# Formato: YAML
+#
+# Compilare tutti i campi applicabili.
+# Usare null quando un dato non è disponibile.
+# Non inserire qui prompt completi o risposte degli LLM:
+# saranno raccolti in un template separato.
+# Utilizzare l'inglese per le risposte testuali
+# ============================================================
+
+schema_version: "1.0"
+
+group_id: "G44"
+repository_url: "https://github.com/Ncastangia1/isw-qubo-classification-G44"
+submission_date: "2026-10-11"
+
+students:
+  - student_id: "60/61/66404"        #Matricola completa
+    role_in_project:
+      - "preprocessing"
+      - "feature_selection"
+      - "classification"
+      - "testing"
+      - "documentation"
+      - "gui"
+  - student_id: "60/61/66397"        #Matricola completa
+    role_in_project:
+      - "preprocessing"
+      - "feature_selection"
+      - "classification"
+      - "testing"
+      - "documentation"
+      - "gui"
+
+team_work:
+  work_distribution:
+    design_percent: 50%
+    preprocessing_percent: 50%
+    qubo_feature_selection_percent: 50%
+    classification_percent: 50%
+    testing_percent: 50%
+    gui_percent: 50%
+    documentation_percent: 50%
+  collaboration_mode:
+    # valori suggeriti: "pair_programming", "divisione_per_moduli", "mista"
+    type: pair_programming
+    notes: "We worked together on all phases of the project, ensuring effective collaboration and communication. We were on call the whole time, sharing screens and using the live share feature of Visual Studio Code. We also used GitHub for version control and code sharing."
+    remote_collaboration_perc: 100%   # Percentuale di lavoro in call (0-100)
+  estimated_total_hours:
+    student_1_hours: 15
+    student_2_hours: 15
+    total_group_hours: 15
+
+initial_context:
+  prior_experience:
+    # valori da usare: "none", "basic", "intermediate", "advanced"
+    python: basic
+    pandas_numpy: none
+    scikit_learn: none
+    machine_learning: basic
+    classification: none
+    feature_selection: none
+    optimization: basic
+    QUBO: none
+    git_github: intermediate
+  initial_confidence:
+    # scala 1-5: 1 = per nulla sicuri, 5 = molto sicuri
+    python_project_development: 2
+    qubo_formulation: 1
+    machine_learning: 2
+    debugging: 4
+    validating_llm_outputs: 4
+
+design_choices:
+  correlation_computation: "Absolute Spearman rank correlation is used to measure feature–target relevance and feature–feature redundancy. Undefined correlations caused by constant inputs are treated as 0."
+  QUBO_optimization_algorithm:
+    algorithm_name: "Simulated annealing"
+    library_used: "dwave-neal"
+    reason_for_choice: "It provides a practical sampler for solving the QUBO feature-selection problem with a configurable random seed."
+  classification_algorithm:
+    algorithm_name: "Random Forest"
+    library_used: "scikit-learn"
+    reason_for_choice: "It was selected as the GUI default and provides a reproducible ensemble classifier for the binary classification task."
+  gui_development: "Tkinter with ttk widgets; the GUI provides dataset loading, preprocessing, feature selection, model training, prediction, and results views."
+  problems_encountered:
+    - problem: "Feature selection could accept an empty feature set when zero fell within the allowed selection range, causing training to fail because the reduced dataset contained only the target column."
+      solution: "Require at least one selected feature and clamp the rounded target feature count to a minimum of one."
+  notes: "The GUI also supports Logistic Regression and Decision Tree classifiers. The classifier and random seed can be selected in the training tab."
+
+llm_usage_summary:
+  # Non inserire prompt o risposte complete: saranno raccolti separatamente.
+  llms_used:    # Inserire un record per ogni LLM usato
+    - name: Copilot
+      version: GPT-5
+      paid_subscription: false
+      usage_level_0_to_3:   # valori da 0 (non usato) a 3 (usatissimo)     
+        value: 3
+    - name: Gemini
+      version: 3.6 Flash
+      paid_subscription: false
+      usage_level_0_to_3:   # valori da 0 (non usato) a 3 (usatissimo)     
+        value: 1
+  phases_where_llm_was_used:
+    requirements_understanding:
+      usage_level_0_to_3: 3
+      usefulness_1_to_5: 5
+      notes: "LLMs were used extensively to interpret the project requirements and clarify the expected workflow."
+    preprocessing:
+      usage_level_0_to_3: 3
+      usefulness_1_to_5: 4
+      notes: "LLMs helped design and implement the data preprocessing steps; the team also reviewed and tested the results."
+    qubo_formulation:
+      usage_level_0_to_3: 3
+      usefulness_1_to_5: 3
+      notes: "LLMs were used extensively, but formulating and validating the QUBO required several iterations and was one of the most difficult parts of the project."
+    optimizer_selection:
+      usage_level_0_to_3: 3
+      usefulness_1_to_5: 4
+      notes: "LLMs helped compare optimization approaches and support the choice and implementation of the QUBO sampler."
+    classifier_selection:
+      usage_level_0_to_3: 3
+      usefulness_1_to_5: 4
+      notes: "LLMs helped review classification options and integrate the classifiers into the training workflow."
+    debugging:
+      usage_level_0_to_3: 3
+      usefulness_1_to_5: 4
+      notes: "LLMs assisted in diagnosing errors and suggesting fixes, while the team also spent substantial effort reproducing issues and validating the fixes."
+    testing:
+      usage_level_0_to_3: 3
+      usefulness_1_to_5: 4
+      notes: "LLMs helped propose and refine tests; the team ran the tests, checked their outcomes, and contributed substantially to testing."
+    documentation:
+      usage_level_0_to_3: 3
+      usefulness_1_to_5: 4
+      notes: "LLMs helped draft and refine project documentation, which was reviewed by the team."
+    gui:
+      usage_level_0_to_3: 3
+      usefulness_1_to_5: 4
+      notes: "LLMs assisted with the GUI design and implementation and with integrating the application workflow."
+  estimated_llm_contribution:
+    percent_code_generated_or_suggested_by_llm: 90%
+    percent_code_accepted_without_major_changes: 80%
+    percent_documentation_generated_or_suggested_by_llm: 60%
+  human_verification:
+    # descrivere come il gruppo ha controllato gli output dell'LLM. (yes/partially/no)
+    methods_used:
+      - code_execution: yes
+      - automated_tests: yes
+      - critical_reading: yes
+      - comparison_with_other_llm: partially
+    notes: "The team checked LLM outputs by running the code, executing automated tests, and critically reviewing the suggested solutions. Some outputs were also compared with another LLM."
+  llm_misleading_outputs:
+    encountered: yes  # (yes/partially/no)
+    examples_count: 3   # number of cases
+    categories:     # rispondere con: yes/partially/no
+      wrong_python_code: yes  
+      wrong_library_usage: no
+      wrong_qubo_formulation: yes
+      wrong_ml_methodology: no
+      hallucinated_api_or_function: partially
+      other: "Some functions suggested by LLMs were not fully correct or optimal, requiring additional verification and testing."
+    impact_on_project: 1   # valori da 0 (nessuno) a 3 (fortissimo)     
+  llm_overall_assessment:  
+    productivity_improvement_1_to_5: 5
+    learning_support_1_to_5: 5
+    risk_of_overreliance_1_to_5: 4
+    trust_in_llm_outputs_1_to_5: 3
+    would_use_again: yes   # (yes/maybe/no)
+    notes: "LLMs substantially improved productivity and supported learning, but their suggestions required careful verification, especially for QUBO formulation and feature selection."
+  most_useful_project_activity: "GUI development and integration of the application workflow"
+  most_difficult_project_activity: "QUBO formulation and validation, which required multiple iterations and careful verification of LLM outputs."
+  main_lessons_learned:   # descrivere con una frase per ogni lezione appresa
+    - "LLMs can significantly accelerate development, but their outputs must be critically evaluated and verified."
+  main_problems:
+    - problem: "QUBO formulation and validation was challenging due to the complexity of the problem and the need for multiple iterations."
+      severity_1_to_5: 4
+      how_resolved: "Through iterative testing, critical review of LLM outputs, and comparison with alternative approaches, the team was able to refine the QUBO formulation and validate its correctness."
+
+final_results:   # descrivere con una frase per ogni elemento che ritenete di citare
+  what_worked_well:
+    - "most of the project phases, including preprocessing, classification, and GUI development"
+  what_did_not_work_well:
+    - "QUBO formulation and validation required multiple iterations and careful verification of LLM outputs."
+  main_benefit_of_using_llm: "LLMs significantly accelerated development"
+  main_problem_of_using_llm: "LLM outputs required careful verification, especially for complex tasks like QUBO formulation and feature selection."
+  surprising_findings:
+    - "LLMs are smarter than expected"
+  limitations_of_the_solution:
+    - "QUBO formulation and validation was challenging and required more debugging and analysis than initially anticipated."
+  threats_to_validity_from_team_perspective:
+    - "LLM outputs may contain errors or misleading suggestions, which could impact the correctness of the solution"

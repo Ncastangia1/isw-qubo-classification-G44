@@ -87,6 +87,9 @@ def _load_dataset(
 
 
 def _safe_abs_spearman(x: pd.Series, y: pd.Series) -> float:
+    if x.nunique(dropna=True) < 2 or y.nunique(dropna=True) < 2:
+        return 0.0
+
     corr, _ = spearmanr(x, y)
 
     if np.isnan(corr):
@@ -245,7 +248,7 @@ def _alpha_search(
 
         distance = abs(selected - target_k)
 
-        if distance < best_distance:
+        if selected > 0 and distance < best_distance:
             best_distance = distance
             best_result = {
                 "alpha": alpha,
@@ -255,7 +258,10 @@ def _alpha_search(
                 "iterations": len(history),
             }
 
-        if target_k - allowance <= selected <= target_k + allowance:
+        if (
+            selected > 0
+            and target_k - allowance <= selected <= target_k + allowance
+        ):
             return best_result, history
 
         if not is_endpoint:
@@ -266,7 +272,12 @@ def _alpha_search(
 
     LOGGER.warning("Alpha search did not converge within the allowed tolerance.")
 
-    assert best_result is not None
+    if best_result is None:
+        raise RuntimeError(
+            "Feature selection did not select any features after "
+            f"{len(history)} alpha computations."
+        )
+
     raise RuntimeError(
         "Feature selection did not find a solution within "
         f"target_k={target_k} +/- {allowance}; "
@@ -342,7 +353,7 @@ def select_features(
 
     n_features = len(feature_names)
 
-    target_k = round(percSelected * n_features)
+    target_k = max(1, round(percSelected * n_features))
 
     result, history = _alpha_search(
         feature_target_corr=feature_target_corr,

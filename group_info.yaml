@@ -2,9 +2,9 @@ group_id: G44
 students:
   - matricola: "66404"
   - matricola: "66397"
-main_llm_used: "Copilot"
+main_llm_used: "Copilot GPT-5"
 paid_subscription_used: false
-second_llm_used: "*****"
+second_llm_used: "Gemini 3.6 Flash"
 third_llm_used: ""
-notes: ""
-project_finished: "false"    # Mettere "true" se consegnato
+notes: "Il gruppo ha utilizzato Copilot GPT-5 per la generazione del codice, della GUI e per la scrittura di documentazione tecnica. Abbiamo utilizzato il 2 step prompting, quindi in una chat di Copilot abbiamo chiesto di generare i prompt per un'altra chat. Abbiamo inoltre utilizzato Gemini per ricontrollare sezioni di codice particolarmente cruciali/problematiche"
+project_finished: "false"
