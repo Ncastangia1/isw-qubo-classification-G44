@@ -44,6 +44,21 @@ a virtual environment, then install the project dependencies.
 
 ### Windows PowerShell
 
+Check that Python 3.11 is installed:
+
+```powershell
+py -3.11 --version
+```
+
+If the command reports that no matching runtime is installed, install Python
+3.11 with the Python install manager:
+
+```powershell
+py install 3.11
+```
+
+Then run the following commands from the repository root:
+
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1

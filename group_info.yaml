@@ -7,4 +7,4 @@ paid_subscription_used: false
 second_llm_used: "Gemini 3.6 Flash"
 third_llm_used: ""
 notes: "Il gruppo ha utilizzato Copilot GPT-5 per la generazione del codice, della GUI e per la scrittura di documentazione tecnica. Abbiamo utilizzato il 2 step prompting, quindi in una chat di Copilot abbiamo chiesto di generare i prompt per un'altra chat. Abbiamo inoltre utilizzato Gemini per ricontrollare sezioni di codice particolarmente cruciali/problematiche"
-project_finished: "false"
+project_finished: "true"
